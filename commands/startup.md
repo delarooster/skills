@@ -15,13 +15,15 @@ Read whichever file exists to understand the project status and current work.
 
 This is a new or uninitialized project. Do NOT silently fail or wait. Instead:
 
-1. Say: "No task files found. This looks like a new project."
-2. Ask the user: "What are you building? Give me a short description and I'll help you get started."
-3. Once they respond, offer to:
+1. Look for: tasks/scratchpad.md
+   - Create a tasks/CURRENT.md with iterable tasks to work against in the next session.
+2. Say: "No task files found. This looks like a new project."
+3. Ask the user: "What are you building? Give me a short description and I'll help you get started."
+4. Once they respond, offer to:
    - Create `scratchpad.md` with their description as a starting brain dump
    - Create `tasks/CURRENT.md` with an initial task list
    - Or run `/begin` if they already have notes to work from
-4. Create whichever files the user approves, then confirm the session is ready.
+5. Create whichever files the user approves, then confirm the session is ready.
 
 ## If no scratchpad.md exists but tasks/ files do
 
