@@ -1,0 +1,9 @@
+# Decisions Log
+
+<!-- Append-only. Each row records a decision and its rationale. -->
+<!-- Rotation: when this file exceeds 200 lines or entries are >30 days old, -->
+<!-- move old entries to tasks/DECISIONS-archive.md. -->
+
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| YYYY-MM-DD | [What was decided] | [Why this over alternatives] |

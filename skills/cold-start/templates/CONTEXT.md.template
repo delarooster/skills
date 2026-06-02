@@ -1,0 +1,33 @@
+# Project Context
+
+<!-- Immutable project substrate. Describes the project, not the session. -->
+<!-- Update only when project scope fundamentally shifts. Flag changes for user review. -->
+
+## Goal
+
+[1-2 paragraphs describing what this project is and why it exists.]
+
+## Requirements
+
+- [Requirement 1]
+- [Requirement 2]
+- [Requirement 3]
+
+## Constraints
+
+- [Technical constraint]
+- [Timeline constraint]
+- [Scope constraint]
+
+## Terminology
+
+| Term | Definition |
+|------|-----------|
+| [term] | [definition] |
+| [term] | [definition] |
+
+## Success Criteria
+
+- [Measurable outcome 1]
+- [Measurable outcome 2]
+- [Measurable outcome 3]

@@ -1,0 +1,28 @@
+# Current Work
+
+<!-- Volatile working set. Keep under 100 lines. -->
+<!-- Rotate completed items to tasks/archive/ when this file grows too long. -->
+
+**Phase:** [current phase name]
+
+**Next:** [one concrete action -- specific enough for a cold session to start immediately]
+
+---
+
+## In Progress
+
+- [ ] [task 1]
+- [ ] [task 2]
+- [ ] [task 3]
+
+## Blocked / Open Questions
+
+<!-- Only if any. Remove when resolved. -->
+
+- [question] -- context: [why it matters]
+
+## Recently Completed
+
+<!-- Last 3-5 items only. Archive the rest. -->
+
+- [x] [completed task]
