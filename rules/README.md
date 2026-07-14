@@ -2,7 +2,7 @@
 
 On-demand agent skills for domain-specific conventions and workflows. Skills load only when triggered — they are **not** read at startup.
 
-Skills are authored in `skills/` (this repo is the source of truth) and deployed to `~/.config/opencode/skills/` via `./setup.sh deploy-skills` for cross-project use.
+Skills are authored in `skills/` (this repo is the source of truth) and deployed via `./setup.sh` for cross-project use: `~/.config/opencode/skills/` (`deploy-skills`), `~/.agents/skills/` (`deploy-codex-skills`), and additively into `~/.claude/skills/` (`deploy-claude-skills`).
 
 ## Available Skills
 

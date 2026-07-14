@@ -20,7 +20,13 @@ cd ~/repos/skills
 ./setup.sh
 ```
 
-This copies skills and slash commands to `~/.config/opencode/` so they're available across all projects.
+Run with no arguments, `./setup.sh` scans your machine for installed AI coding tools (OpenCode, Codex, Claude Code) and prompts per tool before deploying this repo's skills, commands, and rules to each one it finds. Add `-y` to accept every detected tool without prompting (`./setup.sh -y`).
+
+Prefer to be explicit? Deploy to one tool directly — `./setup.sh opencode`, `./setup.sh codex`, or `./setup.sh claude` — or use the granular targets (`deploy-claude-skills`, `deploy-claude-rules`, …). Run `./setup.sh help` for the full list. Destinations: `~/.config/opencode/` (OpenCode), `~/.agents/skills` (Codex), and `~/.claude/` (Claude Code).
+
+### Removing / iterating
+
+Testing a new skill or want a clean slate? `./cleanup.sh` reverses a deploy. It scans for deployed content and prompts per tool (defaulting to No), `-y` removes from everything it finds, and `./cleanup.sh claude` (or `claude-rules`, etc.) targets one thing. Removal is name-based and surgical: only the skills, commands, and the delimited `CLAUDE.md` rules block that this repo owns are removed — your own skills, commands, and notes are never touched.
 
 ### 3. Configure Your AI Tool
 
@@ -34,7 +40,7 @@ All tools use the same startup instructions. See [docs/startup-template.md](star
 
 #### **Claude Code:**
 
-Create `~/.claude/skills/startup/SKILL.md` on your machine and copy content from `docs/startup-template.md`. Run with: `/startup`
+`./setup.sh` deploys skills and commands to `~/.claude/skills` and `~/.claude/commands`, and merges `INSTRUCTIONS.md` into `~/.claude/CLAUDE.md` (global memory, loaded every session) inside a delimited, auto-managed block. Deployment is additive: it only adds/updates this repo's own skills, commands, and rules block, and never deletes anything else already in `~/.claude`. Run with: `/startup`
 
 #### **Other Tools:**
 

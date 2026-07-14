@@ -7,7 +7,8 @@ Workspace-wide AI behavior rules and on-demand agent skills for consistent devel
 ```
 skills/
 ├── INSTRUCTIONS.md          → AI behavior rules and git security lockdown
-├── setup.sh                 → Deploy skills and commands to global config
+├── setup.sh                 → Deploy skills, commands, and rules to opencode, codex/agents, and claude
+├── cleanup.sh               → Remove deployed content (surgical: only files this repo owns)
 ├── docs/                    → Process guidance for working with AI
 ├── rules/                   → Skills catalog (slim index)
 ├── commands/                → Slash commands (source of truth)
@@ -53,7 +54,11 @@ description: Load project context and skills
 Read your instructions in ~/repos/skills folder to understand the project and the context.
 ```
 
-**Claude Code / Other Tools:**
+**Claude Code:**
+
+Run `./setup.sh deploy-claude` (or plain `./setup.sh`). This deploys skills to `~/.claude/skills`, commands to `~/.claude/commands`, and merges `INSTRUCTIONS.md` into `~/.claude/CLAUDE.md` (global memory, read every session) inside an auto-managed block — additive, so nothing else already in `~/.claude` is touched.
+
+**Other Tools:**
 
 Add to custom instructions:
 ```
@@ -122,12 +127,33 @@ Skills load on-demand — only the skill descriptions (~1 line each) are visible
 ## Usage
 
 ```bash
-# First-time setup: deploy both skills and commands to global config
+# Easy path: scan for installed tools (OpenCode, Codex, Claude Code) and
+# prompt per tool before deploying skills, commands, and rules to each.
 ./setup.sh
+./setup.sh -y                    # accept all detected tools, no prompts
 
-# After pulling changes, redeploy individually or together
+# Explicit single tool
+./setup.sh opencode
+./setup.sh codex
+./setup.sh claude
+
+# Granular targets (for upgrades / source-of-truth control).
+# Claude Code (~/.claude) is additive: only adds/updates this repo's own
+# skills, commands, and rules block; never deletes anything else you have.
 ./setup.sh deploy-skills
 ./setup.sh deploy-commands
+./setup.sh deploy-claude-skills
+./setup.sh deploy-claude-commands
+./setup.sh deploy-claude-rules   # merges INSTRUCTIONS.md into ~/.claude/CLAUDE.md
+./setup.sh help                  # full command list
+
+# Undo / iterate: remove what was deployed. Name-based and surgical — only
+# files this repo owns are deleted, and only the delimited rules block is
+# stripped from ~/.claude/CLAUDE.md. Your own skills/commands/notes stay.
+./cleanup.sh                     # scan for deployed content, prompt per tool
+./cleanup.sh -y                  # remove from all detected, no prompts
+./cleanup.sh claude              # remove from one tool
+./cleanup.sh claude-rules        # strip only the CLAUDE.md rules block
 
 # In your project
 /startup
