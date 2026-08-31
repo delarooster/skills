@@ -5,3 +5,6 @@ tasks/
 
 # macOS Finder metadata
 .DS_Store
+
+# Local skill-creator benchmark runs
+skills/*-workspace/
