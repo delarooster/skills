@@ -16,12 +16,15 @@ skills/
 │   ├── begin.md             → Convert scratchpad notes into tracked tasks
 │   ├── clean.md             → Archive work and reset for next session
 │   ├── git.md               → Branch, commit, push, open PR
+│   ├── story-loop.md        → Run one queue-driven implementation iteration
 │   ├── eval.md              → Score instruction set quality
 │   ├── cs-init.md           → Initialize cold-start project files
 │   ├── cs-work.md           → Cold-start work session
 │   └── cs-decide.md         → Cold-start decision mode
 └── skills/                  → On-demand agent skills (source of truth)
+    ├── story-loop/          → Queue-driven implementation loop with stacked PRs
     ├── terraform/           → OpenTofu/Terraform conventions
+    ├── tdd/                 → Test-driven development workflow and patterns
     ├── plan-project/        → Epic/story planning from initiative goals
     ├── git-conventions/     → Branch naming, commits, PR workflows
     ├── cold-start/          → Ephemeral session protocol
@@ -87,6 +90,7 @@ Process guidance for effective AI-assisted development:
 Domain-specific conventions and workflows that load only when triggered. This repo is the **source of truth** — edit skills here, then deploy to your AI tool's global config with `./setup.sh deploy-skills`.
 
 - **terraform/** - Infrastructure code structure, style, and testing patterns
+- **tdd/** - Behavior-focused test-driven development workflow and patterns
 - **plan-project/** - Epic/story creation from initiative goals
 - **git-conventions/** - Branch naming, commit format, PR workflows
 - **cold-start/** - Ephemeral session protocol (stateless read/work/write cycles)

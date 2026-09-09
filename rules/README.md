@@ -11,8 +11,10 @@ Skills are authored in `skills/` (this repo is the source of truth) and deployed
 | `/bicep` | Working with `.bicep` files, modules, private DNS, private endpoints | Loads resource reference, hub/spoke DNS, and style conventions |
 | `/bicep-modules` | Bumping versions, modifying modules published to ACR | Semver classification, version bump workflow, publishing conventions |
 | `/terraform` | Working with `.tf` files, modules, `tofu test` | Loads structure, style, and testing conventions |
+| `/tdd` | "test-first", "red-green-refactor", integration tests | Guides behavior-focused test-driven development |
 | `/plan-project` | "create epics", "break down stories", "plan project work" | Creates epics/stories from initiative goals |
 | `/git-conventions` | Creating branches, writing commits, opening PRs | Loads branch naming, commit format, PR workflow |
+| `/story-loop` | "run the story loop", "work the backlog", "drain the story queue" | Drains a story queue one item per fresh subagent, stacking each PR on the last |
 | `/cold-start` | `/cs-init`, `/cs-work`, `/cs-decide` | Ephemeral session protocol -- stateless read/work/write cycles |
 | `/wrap` | end of session, "wrap up", "close session" | Persists in-session context to tasks/current.md |
 
