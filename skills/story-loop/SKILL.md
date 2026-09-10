@@ -27,7 +27,9 @@ repository, or session. If unsure whether an action is inside a narrowing, it is
 
 **Invoking `/story-loop` authorizes, for queued stories only:** branch creation,
 commits, pushes to those branches, pull request creation against the declared
-base, and story file moves between state folders.
+base, story file moves between state folders, and the closeout commit in
+`commands/git.md` on a clean verdict -- `tasks/` only, on the branch, unprompted.
+An iteration that ends without closing out is not finished.
 
 **It never authorizes:** merge, force push, rebase, reset, amend, tag operations,
 branch deletion, any push to the base branch or to `main`/`master`/`develop`, git
@@ -78,6 +80,11 @@ host, so resolve it rather than assume it.
 7. **Move the story file** per the folder state machine, then
    `"$LS" append <log> <9 fields>` exactly one row.
 
+   On a clean verdict, that move is part of the closeout commit in
+   `commands/git.md`: story into `6_completed`, verdict into
+   `tasks/archive/reviews/`, `tasks/` only, on the branch. A finished iteration
+   leaves nothing for the next one to file.
+
 8. **Stop or continue** against the conditions below.
 
 ## Stop conditions
@@ -102,3 +109,5 @@ completed in the same iteration, that is two rows: the story's, then the stop.
 - [ ] Exactly one log row appended, including for blocked and escalated stories
 - [ ] Route taken from the escalation score alone, never from the summary
 - [ ] Story bodies opened: zero. Verdict files opened: zero. Diffs read: zero
+- [ ] Clean verdict closed out on the branch: story filed, verdict archived,
+      nothing left in `tasks/reviews/` for the next iteration

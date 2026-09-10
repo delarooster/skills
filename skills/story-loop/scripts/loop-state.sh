@@ -18,6 +18,7 @@ Usage: loop-state.sh <command> [args]
 
   init-log <log>                          Create a log with the header row
   index <queue-root>                      List queue stories: id<TAB>deps<TAB>effort<TAB>path
+  completed <queue-root>                  List ids in 6_completed, one per line
   logged <log> <id>                       Exit 0 if the story has a row
   outcome <log> <id>                      Print a story's outcome, or nothing
   head <log> <base>                       Print the chain head branch
@@ -61,6 +62,30 @@ _rows() {
 
 _field() { printf '%s' "$1" | cut -f"$2"; }
 
+# Membership test for a newline-separated list.
+#
+# `producer | grep -qxF needle` looks equivalent and is not. grep -q exits the
+# moment it matches, closing the pipe; the producer then dies on SIGPIPE, and
+# `set -o pipefail` promotes that to exit 141 for the whole pipeline. The test
+# reports "absent" for anything that matches before the last line -- silently,
+# because there is no `set -e` here. Materialise the list, then search it.
+_has_line() { # _has_line <needle> <list>
+  grep -qxF "$1" <<EOF
+$2
+EOF
+}
+
+# Story id: the leading token of the first "# " heading, else the filename stem.
+# One definition, because index and completed must agree on what an id is or a
+# dependency silently stops matching itself.
+_story_id() {
+  local f="$1" id
+  id=$(sed -n 's/^# \([^:]*\):.*/\1/p' "$f" | head -1)
+  id=$(_trim "${id:-}")
+  [ -n "$id" ] || id=$(basename "$f" .md)
+  printf '%s' "$id"
+}
+
 # A row counts toward the chain only if the work actually reached a branch.
 _row_is_chained() {
   local outcome="$1" branch="$2"
@@ -88,12 +113,7 @@ cmd_index() {
     [ -d "$dir" ] || continue
     for f in "$dir"/*.md; do
       [ -e "$f" ] || continue
-      # id: leading token of the first "# " heading, else the filename stem
-      id=$(sed -n 's/^# \([^:]*\):.*/\1/p' "$f" | head -1)
-      id=$(_trim "${id:-}")
-      if [ -z "$id" ]; then
-        id=$(basename "$f" .md)
-      fi
+      id=$(_story_id "$f")
       deps=$(sed -n 's/^\*\*Dependencies:\*\*[[:space:]]*//p' "$f" | head -1)
       deps=$(_trim "${deps:-None}")
       [ -z "$deps" ] && deps="None"
@@ -105,13 +125,27 @@ cmd_index() {
   done
 }
 
+# The second ledger. `6_completed` means merged, and it is the only durable record
+# of that: the log is deliberately untracked, so it starts empty on every fresh
+# checkout and knows nothing about work an earlier run -- or a human -- finished.
+# Without reading this folder, a completed dependency is indistinguishable from a
+# deleted one, and every story that depends on it stalls forever.
+cmd_completed() {
+  local root="$1" f
+  [ -d "$root/6_completed" ] || return 0
+  for f in "$root/6_completed"/*.md; do
+    [ -e "$f" ] || continue
+    printf '%s\n' "$(_story_id "$f")"
+  done
+}
+
 cmd_logged() {
   local log="$1" id="$2" row
   _rows "$log" | while IFS= read -r row; do
     [ "$(_field "$row" 1)" = "$id" ] && exit 0
   done
   # subshell exit does not propagate; re-check explicitly
-  _rows "$log" | cut -f1 | grep -qxF "$id"
+  _has_line "$id" "$(_rows "$log" | cut -f1)"
 }
 
 cmd_outcome() {
@@ -150,16 +184,25 @@ EOF
   printf '%s\n' "$n"
 }
 
-# Dependencies are satisfied only by rows that landed. A dependency logged
-# blocked makes the dependent ineligible; it never silently roots at base.
+# A dependency is done if this loop landed it, or if it sits in 6_completed. Those
+# are the two ledgers and they are checked in that order. A row logged blocked
+# makes the dependent ineligible; it never silently roots at base. Sitting in
+# 6_completed outranks that, because moving a file there is a deliberate claim
+# that the work merged, and merged work is already in the base branch.
+_dep_done() {
+  local root="$1" log="$2" d="$3" oc
+  oc=$(cmd_outcome "$log" "$d")
+  case "$oc" in landed|partial) return 0 ;; esac
+  _has_line "$d" "$(cmd_completed "$root")"
+}
+
 _deps_satisfied() {
-  local log="$1" deps="$2" d oc
+  local root="$1" log="$2" deps="$3" d
   case "$deps" in None|none|NONE|"-"|"") return 0 ;; esac
   for d in $(printf '%s' "$deps" | tr ',' ' '); do
     d=$(_trim "$d")
     [ -n "$d" ] || continue
-    oc=$(cmd_outcome "$log" "$d")
-    case "$oc" in landed|partial) ;; *) return 1 ;; esac
+    _dep_done "$root" "$log" "$d" || return 1
   done
   return 0
 }
@@ -170,8 +213,8 @@ cmd_eligible() {
     [ -n "$line" ] || continue
     id=$(_field "$line" 1)
     deps=$(_field "$line" 2)
-    if _rows "$log" | cut -f1 | grep -qxF "$id"; then continue; fi
-    if _deps_satisfied "$log" "$deps"; then
+    if _has_line "$id" "$(_rows "$log" | cut -f1)"; then continue; fi
+    if _deps_satisfied "$root" "$log" "$deps"; then
       printf '%s\n' "$line"
       return 0
     fi
@@ -187,9 +230,10 @@ EOF
 # or the queue drains while stories vanish.
 _dep_is_pending() {
   local root="$1" log="$2" d="$3" oc
+  _dep_done "$root" "$log" "$d" && return 1      # already done: not pending
   oc=$(cmd_outcome "$log" "$d")
   [ -n "$oc" ] && return 1                       # logged and not landed: permanent
-  cmd_index "$root" | cut -f1 | grep -qxF "$d"   # still queued: pending
+  _has_line "$d" "$(cmd_index "$root" | cut -f1)"  # still queued: pending
 }
 
 cmd_stalled() {
@@ -199,13 +243,13 @@ cmd_stalled() {
     id=$(_field "$line" 1)
     deps=$(_field "$line" 2)
     case "$deps" in None|none|NONE|"-"|"") continue ;; esac
-    if _rows "$log" | cut -f1 | grep -qxF "$id"; then continue; fi
-    _deps_satisfied "$log" "$deps" && continue
+    if _has_line "$id" "$(_rows "$log" | cut -f1)"; then continue; fi
+    _deps_satisfied "$root" "$log" "$deps" && continue
     missing=""
     for d in $(printf '%s' "$deps" | tr ',' ' '); do
       d=$(_trim "$d")
       [ -n "$d" ] || continue
-      case "$(cmd_outcome "$log" "$d")" in landed|partial) continue ;; esac
+      _dep_done "$root" "$log" "$d" && continue
       if ! _dep_is_pending "$root" "$log" "$d"; then
         missing="${missing:+$missing,}$d"
       fi
@@ -271,6 +315,7 @@ cmd_append() {
 case "${1:-help}" in
   init-log)   shift; cmd_init_log "$@" ;;
   index)      shift; cmd_index "$@" ;;
+  completed)  shift; cmd_completed "$@" ;;
   logged)     shift; cmd_logged "$@" ;;
   outcome)    shift; cmd_outcome "$@" ;;
   head)       shift; cmd_head "$@" ;;

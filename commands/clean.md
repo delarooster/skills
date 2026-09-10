@@ -27,6 +27,12 @@ settled PR is history; a verdict on an open PR is live. Check state with
 `gh pr view <N> --json state` and move only the settled ones, into
 `tasks/archive/reviews/`.
 
+This is now a safety net rather than the main path. `commands/git.md` closes each
+cycle out on its own branch, so a verdict reaching this command usually means its
+pull request was abandoned, or landed without a closeout. Both are worth naming in
+the report rather than sweeping silently -- a verdict that keeps needing this
+command is a cycle that keeps ending untidily.
+
 Keep `tasks/reviews/README.md` where it is. Its calibration table only has value
 as it accumulates across sessions, so it never archives.
 
@@ -40,6 +46,12 @@ Do check it for drift, which is the failure this rule exists to prevent: if item
 show as open locally but merged on the default branch, the checkout is stale.
 Report that; do not "fix" it by editing, or the same edit lands twice and
 conflicts on the next pull.
+
+**`tasks/stories/`. Ever.** The state folders under it *are* the dependency
+ledger that `/story-loop` reads. A completed story belongs in
+`tasks/stories/6_completed/`, never in `tasks/archive/`. Move one out of the queue
+root and every story declaring it as a dependency is reported
+`dependency unsatisfiable` forever, while the queue reports itself drained.
 
 **Anything under `.claude/`.** Agent definitions and configuration are tooling,
 not session output.

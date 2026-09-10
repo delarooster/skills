@@ -114,6 +114,30 @@ eq "with the dependency that can never be met" "Z.09" "$("$LS" stalled "$Q" "$LO
 eq "once logged, it stops being reported" "" "$("$LS" stalled "$Q" "$LOG")"
 eq "queue is genuinely drained" "" "$("$LS" eligible "$Q" "$LOG")"
 
+echo "== a dependency completed outside the log still counts =="
+# The log is untracked and starts empty on a fresh checkout, so work finished by
+# an earlier run -- or by hand -- exists only as a file in 6_completed. Read the
+# log alone and every dependent of that work is unsatisfiable forever.
+# Three of them, deliberately. With a single completed story the match always
+# lands on the last line, which is exactly the case where a `producer | grep -q`
+# membership test does NOT die on SIGPIPE. A one-item fixture reports PASS on a
+# lookup that is broken for every real queue.
+story 6_completed z-20.md Z.20 None 1
+story 6_completed z-22.md Z.22 None 1
+story 6_completed z-23.md Z.23 None 1
+story 1_backlog   z-21.md Z.21 Z.20 2
+eq "6_completed is still not a queue member" "" \
+   "$("$LS" index "$Q" | awk -F'\t' '$1=="Z.20"{print $1}')"
+eq "the completed ledger sees all three" "Z.20 Z.22 Z.23" \
+   "$("$LS" completed "$Q" | tr '\n' ' ' | sed 's/ $//')"
+eq "a match on the FIRST line is found, not lost to SIGPIPE" "Z.21" \
+   "$("$LS" eligible "$Q" "$LOG" | cut -f1)"
+eq "its dependent becomes eligible" "Z.21" "$("$LS" eligible "$Q" "$LOG" | cut -f1)"
+eq "and is never reported stalled" "" \
+   "$("$LS" stalled "$Q" "$LOG" | awk -F'\t' '$1=="Z.21"{print $1}')"
+eq "a merged dependency roots at the base, not a stale branch" "$BASE" \
+   "$("$LS" parent "$LOG" "$BASE" linear Z.20)"
+
 echo "== unstacked detection =="
 exits "matching base passes" 0 "$LS" check-base feat/z-02 feat/z-02
 exits "mismatched base fails"  1 "$LS" check-base feat/z-02 "$BASE"

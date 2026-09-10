@@ -45,12 +45,28 @@ folder is fixed:
 
 | Outcome | Move the story file to | Why |
 |---|---|---|
-| `landed` | `4_in-review` | The pull request is open and unmerged. Work is done; review is not |
+| `landed`, verifier not yet run | `4_in-review` | The pull request is open and unjudged. Work is done; review is not |
+| `landed`, clean verdict | `6_completed` | In the closeout commit, on the branch. See below |
 | `partial` | `4_in-review` | Same state, with the shortfall recorded in the log row |
 | `blocked` | `5_blocked` | Including underspecified, unstacked, bad return, and unsatisfiable dependency |
 
-`6_completed` means merged. This loop never merges, so it never writes that
-folder; whoever merges the chain moves the files. `3_in-progress` is optional: use
+`6_completed` means merged, or on a branch whose only remaining step is the
+merge. The loop never merges, but it does not leave the filing to "whoever merges
+the chain" either -- that is how stories end up shipped and still sitting in
+`1_backlog`. When the verifier returns a clean verdict, the closeout commit in
+`commands/git.md` moves the story from `4_in-review` to `6_completed` **on the
+branch**, so the ledger lands at the same instant the merge does and dies with the
+branch if the pull request is abandoned. **The folder is load-bearing either
+way.**
+The log is untracked and starts empty on a fresh checkout, so `6_completed` is the
+only durable record that a story finished, and `"$LS" completed <queue-root>`
+reads it to satisfy dependencies. Move merged stories there and nowhere else.
+
+**Never archive story files out of the queue root.** Moving them to
+`tasks/archive/` or any path outside `<queue-root>` deletes them from the
+dependency ledger, and every story that depends on one is then reported
+`dependency unsatisfiable` forever. The queue root is the ledger; archiving is
+for session records, not for stories. `3_in-progress` is optional: use
 it while an implementer is in flight if you want a crash to be visible, but move
 the file out before appending the log row, so a resumed run sees a consistent tree.
 
@@ -72,6 +88,19 @@ stories merely waiting on a dependency still in the queue. Log each one
 `blocked :: dependency unsatisfiable` with the named dependency. Without this
 step a story with a typo'd or deleted dependency vanishes silently while the queue
 reports itself drained.
+
+**A story in `6_completed` on a stacked branch is a satisfied dependency**, and
+should be. The next implementer builds on that branch, so the work is genuinely
+present in the tree it inherits -- more true than `4_in-review`, which says the
+work exists but refuses to let anything use it. On the base branch the story stays
+where it was until the merge, which is also correct: nothing there can see it yet.
+
+**Two ledgers answer "is this dependency done?"**, in order: a `landed` or
+`partial` row in the log, then presence in `6_completed`. A dependency in neither
+is unsatisfiable. Before acting on a `stalled` report, check that the named
+dependency is not simply a finished story filed somewhere other than
+`6_completed` -- that is a bookkeeping defect in the queue, not a blocked story,
+and logging it as blocked buries it.
 
 ## Implementer subagent
 
