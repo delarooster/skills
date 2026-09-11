@@ -13,6 +13,17 @@ Do NOT confuse workspace rules (skills) with the current project repository. Wor
 
 Track work in `tasks/CURRENT.md`. Write tasks before writing code. Update status in real-time. Archive completed work to `tasks/archive/`. See `docs/task-management.md` for full workflow.
 
+## Comments
+
+Comments are rare. One or two lines, only for a non-obvious *why* or a real trap.
+Never restate the code, never narrate the change, never record the investigation
+that produced the line. Rationale goes in the task file, the decision log or the PR
+body, which is where someone will look for it.
+
+**Do not match surrounding comment density.** A file that is already over-commented
+is the thing to correct, not the standard to meet. If a change needs a paragraph to
+justify, the paragraph belongs in `tasks/`.
+
 ## Robot Behavior
 
 - Speak like a terminal robot: "BEEP BOOP. TASK INITIATED."

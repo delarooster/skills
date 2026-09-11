@@ -3,6 +3,7 @@ set -euo pipefail
 
 SKILLS_SRC="$(dirname "$0")/skills"
 COMMANDS_SRC="$(dirname "$0")/commands"
+CLAUDE_AGENTS_SRC="$(dirname "$0")/agents"
 INSTRUCTIONS_SRC="$(dirname "$0")/INSTRUCTIONS.md"
 
 # Deployment destinations
@@ -13,6 +14,7 @@ AGENTS_SKILLS_DEST="$HOME/.agents/skills"   # shared: OpenCode (external) + Code
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_SKILLS_DEST="$CLAUDE_DIR/skills"
 CLAUDE_COMMANDS_DEST="$CLAUDE_DIR/commands"
+CLAUDE_AGENTS_DEST="$CLAUDE_DIR/agents"
 CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 
 # Delimiters wrapping the workspace rules block inside CLAUDE.md. Content
@@ -26,8 +28,8 @@ usage() {
 Usage: ./setup.sh [command]
 
 With NO command, ./setup.sh scans your machine for installed AI coding tools
-(OpenCode, Codex, Claude Code) and deploys this repo's skills, commands, and
-rules to each one it finds -- prompting per tool. This is the easy path:
+(OpenCode, Codex, Claude Code) and deploys this repo's skills, commands, agents,
+and rules to each one it finds -- prompting per tool. This is the easy path:
 just run ./setup.sh and answer the prompts. Add -y to accept every detected
 tool without prompting.
 
@@ -54,6 +56,7 @@ Cleanup (remove what was deployed -- see also ./cleanup.sh):
   clean claude            Remove this repo's skills, commands, and rules block
   clean claude-skills     Remove only this repo's skills from ~/.claude/skills
   clean claude-commands   Remove only this repo's commands from ~/.claude/commands
+  clean claude-agents     Remove only this repo's agents from ~/.claude/agents
   clean claude-rules      Strip the rules block from ~/.claude/CLAUDE.md
                           Removal is name-based: only files this repo owns are
                           deleted; your own skills/commands/notes are kept.
@@ -63,20 +66,22 @@ Granular (explicit source-of-truth control / upgrades):
   deploy-commands         Sync slash commands → opencode config
   deploy-codex-skills     Sync skills → ~/.agents/skills (Codex + OpenCode external)
   deploy-all-skills       Sync skills to both opencode and codex/agents destinations
-  deploy-claude           Sync skills, commands, and rules → ~/.claude (additive)
+  deploy-claude           Sync skills, commands, agents, and rules → ~/.claude (additive)
   deploy-claude-skills    Sync skills → ~/.claude/skills (additive)
   deploy-claude-commands  Sync slash commands → ~/.claude/commands (additive)
+  deploy-claude-agents    Sync Claude agents → ~/.claude/agents (additive)
   deploy-claude-rules     Merge INSTRUCTIONS.md into ~/.claude/CLAUDE.md (additive)
   diff-skills             Show drift between repo and opencode deployed skills
   diff-codex-skills       Show drift between repo and codex/agents deployed skills
   diff-commands           Show drift between repo and deployed commands
   diff-claude-skills      Show drift between repo and claude deployed skills
   diff-claude-commands    Show drift between repo and claude deployed commands
+  diff-claude-agents      Show drift between repo and claude deployed agents
   diff-claude-rules       Show drift between INSTRUCTIONS.md and the CLAUDE.md rules block
   help                    Show this help message
 
 "Additive" targets (claude-*) never delete files they didn't create. They
-only add or update the skills/commands/rules that come from this repo, so
+only add or update the skills/commands/agents/rules that come from this repo, so
 anything else you already have in ~/.claude is left alone.
 EOF
 }
@@ -153,6 +158,13 @@ deploy_claude_commands() {
   echo "Done. $count command(s) synced. Anything else already in $CLAUDE_COMMANDS_DEST is left untouched."
 }
 
+deploy_claude_agents() {
+  echo "Deploying agents → $CLAUDE_AGENTS_DEST (additive)"
+  _sync_additive "$CLAUDE_AGENTS_SRC" "$CLAUDE_AGENTS_DEST"
+  count=$(find "$CLAUDE_AGENTS_SRC" -name '*.md' | wc -l | tr -d ' ')
+  echo "Done. $count agent(s) synced. Anything else already in $CLAUDE_AGENTS_DEST is left untouched."
+}
+
 # Merge INSTRUCTIONS.md into ~/.claude/CLAUDE.md inside a delimited block.
 # Re-running replaces only that block, so edits elsewhere in CLAUDE.md (the
 # user's own notes/preferences) are preserved.
@@ -193,6 +205,7 @@ deploy_claude_rules() {
 deploy_claude() {
   deploy_claude_skills
   deploy_claude_commands
+  deploy_claude_agents
   deploy_claude_rules
 }
 
@@ -218,6 +231,11 @@ diff_claude_skills() {
 diff_claude_commands() {
   echo "Diff: repo vs claude ($CLAUDE_COMMANDS_DEST) -- extra files in dest are expected (additive)"
   diff -rq "$COMMANDS_SRC" "$CLAUDE_COMMANDS_DEST" 2>/dev/null | grep -vF "Only in $CLAUDE_COMMANDS_DEST" || true
+}
+
+diff_claude_agents() {
+  echo "Diff: repo vs claude ($CLAUDE_AGENTS_DEST) -- extra files in dest are expected (additive)"
+  diff -rq "$CLAUDE_AGENTS_SRC" "$CLAUDE_AGENTS_DEST" 2>/dev/null | grep -vF "Only in $CLAUDE_AGENTS_DEST" || true
 }
 
 diff_claude_rules() {
@@ -314,6 +332,27 @@ clean_claude_commands() {
   _remove_named_commands "$CLAUDE_COMMANDS_DEST"
 }
 
+_remove_named_agents() {
+  local dest="$1" f removed=0
+  if [[ ! -d "$dest" ]]; then
+    echo "  (nothing at $dest)"
+    return
+  fi
+  for f in "$CLAUDE_AGENTS_SRC"/*.md; do
+    if [[ -e "$dest/$(basename "$f")" ]]; then
+      rm -f "${dest:?}/$(basename "$f")"
+      removed=$((removed + 1))
+    fi
+  done
+  rmdir "$dest" 2>/dev/null || true
+  echo "  Removed $removed agent(s) from $dest"
+}
+
+clean_claude_agents() {
+  echo "Removing agents → $CLAUDE_AGENTS_DEST"
+  _remove_named_agents "$CLAUDE_AGENTS_DEST"
+}
+
 clean_opencode() {
   echo "Removing skills content from OpenCode"
   _remove_named_skills "$OPENCODE_SKILLS_DEST"
@@ -329,6 +368,7 @@ clean_claude() {
   echo "Removing skills content from Claude Code"
   clean_claude_skills
   clean_claude_commands
+  clean_claude_agents
   clean_claude_rules
 }
 
@@ -404,6 +444,16 @@ _dest_has_our_commands() {
   return 1
 }
 
+# Does dest contain any agent file this repo owns?
+_dest_has_our_agents() {
+  local dest="$1" f
+  [[ -d "$dest" ]] || return 1
+  for f in "$CLAUDE_AGENTS_SRC"/*.md; do
+    [[ -e "$dest/$(basename "$f")" ]] && return 0
+  done
+  return 1
+}
+
 # Has this tool actually received any skills content? (Used by cleanup
 # so it only prompts for tools that have something to remove.)
 detect_deployed() {
@@ -411,6 +461,7 @@ detect_deployed() {
     opencode) _dest_has_our_skills "$OPENCODE_SKILLS_DEST" || _dest_has_our_commands "$OPENCODE_COMMANDS_DEST" ;;
     codex)    _dest_has_our_skills "$AGENTS_SKILLS_DEST" ;;
     claude)   _dest_has_our_skills "$CLAUDE_SKILLS_DEST" || _dest_has_our_commands "$CLAUDE_COMMANDS_DEST" \
+                || _dest_has_our_agents "$CLAUDE_AGENTS_DEST" \
                 || { [[ -f "$CLAUDE_MD" ]] && grep -qF "$RULES_BLOCK_START" "$CLAUDE_MD"; } ;;
   esac
 }
@@ -548,6 +599,7 @@ run_clean_dispatch() {
     claude)           clean_claude ;;
     claude-skills)    clean_claude_skills ;;
     claude-commands)  clean_claude_commands ;;
+    claude-agents)    clean_claude_agents ;;
     claude-rules)     clean_claude_rules ;;
     help|--help|-h)   usage ;;
     *)                echo "Unknown clean target: $1"; usage; exit 1 ;;
@@ -570,12 +622,14 @@ case "${1:-auto}" in
   deploy-claude)           deploy_claude ;;
   deploy-claude-skills)    deploy_claude_skills ;;
   deploy-claude-commands)  deploy_claude_commands ;;
+  deploy-claude-agents)    deploy_claude_agents ;;
   deploy-claude-rules)     deploy_claude_rules ;;
   diff-skills)             diff_skills ;;
   diff-codex-skills)       diff_codex_skills ;;
   diff-commands)           diff_commands ;;
   diff-claude-skills)      diff_claude_skills ;;
   diff-claude-commands)    diff_claude_commands ;;
+  diff-claude-agents)      diff_claude_agents ;;
   diff-claude-rules)       diff_claude_rules ;;
   help|--help|-h)          usage ;;
   *)                       echo "Unknown command: $1"; usage; exit 1 ;;

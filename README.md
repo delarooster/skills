@@ -21,6 +21,7 @@ skills/
 │   ├── cs-init.md           → Initialize cold-start project files
 │   ├── cs-work.md           → Cold-start work session
 │   └── cs-decide.md         → Cold-start decision mode
+├── agents/                  → Claude Code agents (source of truth)
 └── skills/                  → On-demand agent skills (source of truth)
     ├── story-loop/          → Queue-driven implementation loop with stacked PRs
     ├── terraform/           → OpenTofu/Terraform conventions
@@ -59,7 +60,7 @@ Read your instructions in ~/repos/skills folder to understand the project and th
 
 **Claude Code:**
 
-Run `./setup.sh deploy-claude` (or plain `./setup.sh`). This deploys skills to `~/.claude/skills`, commands to `~/.claude/commands`, and merges `INSTRUCTIONS.md` into `~/.claude/CLAUDE.md` (global memory, read every session) inside an auto-managed block — additive, so nothing else already in `~/.claude` is touched.
+Run `./setup.sh deploy-claude` (or plain `./setup.sh`). This deploys skills to `~/.claude/skills`, commands to `~/.claude/commands`, Claude agents to `~/.claude/agents`, and merges `INSTRUCTIONS.md` into `~/.claude/CLAUDE.md` (global memory, read every session) inside an auto-managed block — additive, so nothing else already in `~/.claude` is touched.
 
 **Other Tools:**
 
@@ -95,6 +96,12 @@ Domain-specific conventions and workflows that load only when triggered. This re
 - **git-conventions/** - Branch naming, commit format, PR workflows
 - **cold-start/** - Ephemeral session protocol (stateless read/work/write cycles)
 - **wrap/** - Session closing ritual (persist context to tasks/current.md)
+
+### agents/ (Claude Code Agents)
+Portable Claude Code subagents are deployed additively to `~/.claude/agents`.
+
+- **pr-judge.md** - Independent, evidence-backed pull request reviewer
+- **verdict-scorer.md** - Routes an existing pull request verdict by escalation score
 
 ## Key Features
 
@@ -148,6 +155,7 @@ Skills load on-demand — only the skill descriptions (~1 line each) are visible
 ./setup.sh deploy-commands
 ./setup.sh deploy-claude-skills
 ./setup.sh deploy-claude-commands
+./setup.sh deploy-claude-agents
 ./setup.sh deploy-claude-rules   # merges INSTRUCTIONS.md into ~/.claude/CLAUDE.md
 ./setup.sh help                  # full command list
 
@@ -157,6 +165,7 @@ Skills load on-demand — only the skill descriptions (~1 line each) are visible
 ./cleanup.sh                     # scan for deployed content, prompt per tool
 ./cleanup.sh -y                  # remove from all detected, no prompts
 ./cleanup.sh claude              # remove from one tool
+./cleanup.sh claude-agents       # remove only this repo's Claude agents
 ./cleanup.sh claude-rules        # strip only the CLAUDE.md rules block
 
 # In your project

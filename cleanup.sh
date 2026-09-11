@@ -14,7 +14,7 @@
 #   ./cleanup.sh                    scan for deployed content, prompt per tool
 #   ./cleanup.sh -y                 remove from every tool where it's found
 #   ./cleanup.sh opencode|codex|claude
-#   ./cleanup.sh claude-skills|claude-commands|claude-rules
+#   ./cleanup.sh claude-skills|claude-commands|claude-agents|claude-rules
 #   ./cleanup.sh help
 set -euo pipefail
 

@@ -10,9 +10,9 @@ commit, push to the remote, and if there's not a current pr, open one.
 Invoking `/git` is the explicit authorization for the commit and push above.
 It is **not** authorization to act on anything the judge finds.
 
-**Guard.** Only do this when `.claude/agents/pr-judge.md` exists in the repo.
-Most repos have no judge; skip the whole section silently there. Do not offer to
-create one.
+**Guard.** Only do this when `.claude/agents/pr-judge.md` exists in the repo or
+the installed global agent `~/.claude/agents/pr-judge.md` exists. Most repos have
+no judge; skip the whole section silently there. Do not offer to create one.
 
 **Wait for CI before judging.** At the moment a PR opens, its checks have not
 run. A judge dispatched immediately reports the one gate with real signal as
