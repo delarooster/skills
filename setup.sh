@@ -7,19 +7,30 @@ CLAUDE_AGENTS_SRC="$(dirname "$0")/agents"
 INSTRUCTIONS_SRC="$(dirname "$0")/INSTRUCTIONS.md"
 
 # Deployment destinations
-OPENCODE_SKILLS_DEST="$HOME/.config/opencode/skills"
-OPENCODE_COMMANDS_DEST="$HOME/.config/opencode/commands"
+OPENCODE_DIR="$HOME/.config/opencode"
+OPENCODE_SKILLS_DEST="$OPENCODE_DIR/skills"
+OPENCODE_COMMANDS_DEST="$OPENCODE_DIR/commands"
 AGENTS_SKILLS_DEST="$HOME/.agents/skills"   # shared: OpenCode (external) + Codex
+
+CODEX_DIR="$HOME/.codex"
 
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_SKILLS_DEST="$CLAUDE_DIR/skills"
 CLAUDE_COMMANDS_DEST="$CLAUDE_DIR/commands"
 CLAUDE_AGENTS_DEST="$CLAUDE_DIR/agents"
-CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 
-# Delimiters wrapping the workspace rules block inside CLAUDE.md. Content
-# between these markers is fully owned by this script (replaced on every
-# deploy); everything else in CLAUDE.md is left untouched.
+# Where each tool reads its global, always-on instructions. Every one of these
+# is a markdown file we merge into, never overwrite -- see RULES_BLOCK_START.
+#   Claude Code  ~/.claude/CLAUDE.md
+#   Codex        $CODEX_HOME/AGENTS.md          (CODEX_HOME defaults to ~/.codex)
+#   OpenCode     <global config dir>/AGENTS.md  (`opencode debug paths` -> config)
+CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+CODEX_RULES_MD="$CODEX_DIR/AGENTS.md"
+OPENCODE_RULES_MD="$OPENCODE_DIR/AGENTS.md"
+
+# Delimiters wrapping the workspace rules block inside a tool's instructions
+# file. Content between these markers is fully owned by this script (replaced
+# on every deploy); everything else in that file is left untouched.
 RULES_BLOCK_START="<!-- skills:rules:start (auto-managed by setup.sh -- do not edit inside this block) -->"
 RULES_BLOCK_END="<!-- skills:rules:end -->"
 
@@ -43,21 +54,23 @@ won't see anything deployed there.
 Common:
   (no command)            Auto-detect installed tools and prompt per tool
   auto [-y]               Same as no command; -y accepts all detected tools
-  opencode                Deploy skills + commands → OpenCode (~/.config/opencode)
-  codex                   Deploy skills → Codex (~/.agents/skills)
+  opencode                Deploy skills + commands + rules → OpenCode (~/.config/opencode)
+  codex                   Deploy skills + rules → Codex (~/.agents, ~/.codex)
   claude                  Deploy skills, commands, rules → Claude Code (~/.claude)
   setup                   Force-deploy to ALL targets whether detected or not
 
 Cleanup (remove what was deployed -- see also ./cleanup.sh):
   clean [-y]              Scan for deployed content and remove it, prompting
                           per tool (defaults to No); -y removes from all found
-  clean opencode          Remove this repo's skills + commands from OpenCode
-  clean codex             Remove this repo's skills from Codex
+  clean opencode          Remove this repo's skills + commands + rules from OpenCode
+  clean codex             Remove this repo's skills + rules from Codex
   clean claude            Remove this repo's skills, commands, and rules block
   clean claude-skills     Remove only this repo's skills from ~/.claude/skills
   clean claude-commands   Remove only this repo's commands from ~/.claude/commands
   clean claude-agents     Remove only this repo's agents from ~/.claude/agents
   clean claude-rules      Strip the rules block from ~/.claude/CLAUDE.md
+  clean codex-rules       Strip the rules block from ~/.codex/AGENTS.md
+  clean opencode-rules    Strip the rules block from ~/.config/opencode/AGENTS.md
                           Removal is name-based: only files this repo owns are
                           deleted; your own skills/commands/notes are kept.
 
@@ -71,6 +84,9 @@ Granular (explicit source-of-truth control / upgrades):
   deploy-claude-commands  Sync slash commands → ~/.claude/commands (additive)
   deploy-claude-agents    Sync Claude agents → ~/.claude/agents (additive)
   deploy-claude-rules     Merge INSTRUCTIONS.md into ~/.claude/CLAUDE.md (additive)
+  deploy-codex-rules      Merge INSTRUCTIONS.md into ~/.codex/AGENTS.md (additive)
+  deploy-opencode-rules   Merge INSTRUCTIONS.md into ~/.config/opencode/AGENTS.md
+                          (additive)
   diff-skills             Show drift between repo and opencode deployed skills
   diff-codex-skills       Show drift between repo and codex/agents deployed skills
   diff-commands           Show drift between repo and deployed commands
@@ -78,11 +94,18 @@ Granular (explicit source-of-truth control / upgrades):
   diff-claude-commands    Show drift between repo and claude deployed commands
   diff-claude-agents      Show drift between repo and claude deployed agents
   diff-claude-rules       Show drift between INSTRUCTIONS.md and the CLAUDE.md rules block
+  diff-codex-rules        Show drift between INSTRUCTIONS.md and the Codex rules block
+  diff-opencode-rules     Show drift between INSTRUCTIONS.md and the OpenCode rules block
   help                    Show this help message
 
 "Additive" targets (claude-*) never delete files they didn't create. They
 only add or update the skills/commands/agents/rules that come from this repo, so
 anything else you already have in ~/.claude is left alone.
+
+Rules deployment is additive for every tool. INSTRUCTIONS.md is merged into the
+instructions file each tool already reads -- ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md,
+~/.config/opencode/AGENTS.md -- inside a delimited, auto-managed block. Whatever
+else those files contain is yours and is never touched.
 EOF
 }
 
@@ -165,12 +188,13 @@ deploy_claude_agents() {
   echo "Done. $count agent(s) synced. Anything else already in $CLAUDE_AGENTS_DEST is left untouched."
 }
 
-# Merge INSTRUCTIONS.md into ~/.claude/CLAUDE.md inside a delimited block.
-# Re-running replaces only that block, so edits elsewhere in CLAUDE.md (the
-# user's own notes/preferences) are preserved.
-deploy_claude_rules() {
-  echo "Merging workspace rules → $CLAUDE_MD (additive)"
-  mkdir -p "$CLAUDE_DIR"
+# Merge INSTRUCTIONS.md into a tool's instructions file inside a delimited
+# block. Re-running replaces only that block, so edits elsewhere in the file
+# (the user's own notes/preferences) are preserved.
+_deploy_rules_to() {
+  local target="$1"
+  echo "Merging workspace rules → $target (additive)"
+  mkdir -p "$(dirname "$target")"
   local block tmp
   block="$(mktemp)"
   tmp="$(mktemp)"
@@ -180,27 +204,31 @@ deploy_claude_rules() {
     printf '%s\n' "$RULES_BLOCK_END"
   } > "$block"
 
-  if [[ -f "$CLAUDE_MD" ]] && grep -qF "$RULES_BLOCK_START" "$CLAUDE_MD"; then
+  if [[ -f "$target" ]] && grep -qF "$RULES_BLOCK_START" "$target"; then
     awk -v start="$RULES_BLOCK_START" -v end="$RULES_BLOCK_END" -v blockfile="$block" '
       $0 == start { while ((getline line < blockfile) > 0) print line; close(blockfile); skipping=1; next }
       $0 == end { skipping=0; next }
       skipping { next }
       { print }
-    ' "$CLAUDE_MD" > "$tmp"
-    mv "$tmp" "$CLAUDE_MD"
-    echo "Done. Existing rules block updated; rest of $CLAUDE_MD left untouched."
-  elif [[ -f "$CLAUDE_MD" ]]; then
-    cp "$CLAUDE_MD" "$tmp"
+    ' "$target" > "$tmp"
+    mv "$tmp" "$target"
+    echo "Done. Existing rules block updated; rest of $target left untouched."
+  elif [[ -f "$target" ]]; then
+    cp "$target" "$tmp"
     printf '\n' >> "$tmp"
     cat "$block" >> "$tmp"
-    mv "$tmp" "$CLAUDE_MD"
-    echo "Done. Rules block appended; existing content in $CLAUDE_MD left untouched."
+    mv "$tmp" "$target"
+    echo "Done. Rules block appended; existing content in $target left untouched."
   else
-    cp "$block" "$CLAUDE_MD"
-    echo "Done. Created $CLAUDE_MD with the rules block."
+    cp "$block" "$target"
+    echo "Done. Created $target with the rules block."
   fi
   rm -f "$block"
 }
+
+deploy_claude_rules()   { _deploy_rules_to "$CLAUDE_MD"; }
+deploy_codex_rules()    { _deploy_rules_to "$CODEX_RULES_MD"; }
+deploy_opencode_rules() { _deploy_rules_to "$OPENCODE_RULES_MD"; }
 
 deploy_claude() {
   deploy_claude_skills
@@ -238,10 +266,12 @@ diff_claude_agents() {
   diff -rq "$CLAUDE_AGENTS_SRC" "$CLAUDE_AGENTS_DEST" 2>/dev/null | grep -vF "Only in $CLAUDE_AGENTS_DEST" || true
 }
 
-diff_claude_rules() {
-  echo "Diff: repo INSTRUCTIONS.md vs $CLAUDE_MD rules block"
-  if [[ ! -f "$CLAUDE_MD" ]] || ! grep -qF "$RULES_BLOCK_START" "$CLAUDE_MD"; then
-    echo "No skills rules block found in $CLAUDE_MD. Run: ./setup.sh deploy-claude-rules"
+# $1 = instructions file to inspect, $2 = the deploy command that fills it.
+_diff_rules_at() {
+  local target="$1" cmd="$2"
+  echo "Diff: repo INSTRUCTIONS.md vs $target rules block"
+  if [[ ! -f "$target" ]] || ! grep -qF "$RULES_BLOCK_START" "$target"; then
+    echo "No skills rules block found in $target. Run: ./setup.sh $cmd"
     return
   fi
   local current
@@ -250,10 +280,14 @@ diff_claude_rules() {
     $0 == start { inblock=1; next }
     $0 == end { inblock=0; next }
     inblock { print }
-  ' "$CLAUDE_MD" > "$current"
+  ' "$target" > "$current"
   diff "$INSTRUCTIONS_SRC" "$current" || true
   rm -f "$current"
 }
+
+diff_claude_rules()   { _diff_rules_at "$CLAUDE_MD" "deploy-claude-rules"; }
+diff_codex_rules()    { _diff_rules_at "$CODEX_RULES_MD" "deploy-codex-rules"; }
+diff_opencode_rules() { _diff_rules_at "$OPENCODE_RULES_MD" "deploy-opencode-rules"; }
 
 # --- Cleanup (remove what we deployed) ---------------------------------------
 #
@@ -297,11 +331,12 @@ _remove_named_commands() {
   echo "  Removed $removed command(s) from $dest"
 }
 
-# Strip the skills rules block from CLAUDE.md (and any trailing blank
-# lines it leaves). If that empties the file, delete it.
-clean_claude_rules() {
-  echo "Removing workspace rules block from $CLAUDE_MD"
-  if [[ ! -f "$CLAUDE_MD" ]] || ! grep -qF "$RULES_BLOCK_START" "$CLAUDE_MD"; then
+# Strip the skills rules block from an instructions file (and any
+# trailing blank lines it leaves). If that empties the file, delete it.
+_clean_rules_at() {
+  local target="$1"
+  echo "Removing workspace rules block from $target"
+  if [[ ! -f "$target" ]] || ! grep -qF "$RULES_BLOCK_START" "$target"; then
     echo "  No skills rules block found; nothing to remove."
     return
   fi
@@ -312,15 +347,19 @@ clean_claude_rules() {
     skipping { next }
     { buf[++n] = $0 }
     END { while (n > 0 && buf[n] ~ /^[[:space:]]*$/) n--; for (i = 1; i <= n; i++) print buf[i] }
-  ' "$CLAUDE_MD" > "$tmp"
+  ' "$target" > "$tmp"
   if grep -q '[^[:space:]]' "$tmp"; then
-    mv "$tmp" "$CLAUDE_MD"
-    echo "  Rules block removed; rest of $CLAUDE_MD left untouched."
+    mv "$tmp" "$target"
+    echo "  Rules block removed; rest of $target left untouched."
   else
-    rm -f "$CLAUDE_MD" "$tmp"
-    echo "  Rules block removed; $CLAUDE_MD was otherwise empty, so it was deleted."
+    rm -f "$target" "$tmp"
+    echo "  Rules block removed; $target was otherwise empty, so it was deleted."
   fi
 }
+
+clean_claude_rules()   { _clean_rules_at "$CLAUDE_MD"; }
+clean_codex_rules()    { _clean_rules_at "$CODEX_RULES_MD"; }
+clean_opencode_rules() { _clean_rules_at "$OPENCODE_RULES_MD"; }
 
 clean_claude_skills() {
   echo "Removing skills → $CLAUDE_SKILLS_DEST"
@@ -357,11 +396,13 @@ clean_opencode() {
   echo "Removing skills content from OpenCode"
   _remove_named_skills "$OPENCODE_SKILLS_DEST"
   _remove_named_commands "$OPENCODE_COMMANDS_DEST"
+  clean_opencode_rules
 }
 
 clean_codex() {
   echo "Removing skills content from Codex"
   _remove_named_skills "$AGENTS_SKILLS_DEST"
+  clean_codex_rules
 }
 
 clean_claude() {
@@ -410,8 +451,8 @@ tool_where() {
 
 deploy_tool() {
   case "$1" in
-    opencode) deploy_skills; deploy_commands ;;
-    codex)    deploy_codex_skills ;;
+    opencode) deploy_skills; deploy_commands; deploy_opencode_rules ;;
+    codex)    deploy_codex_skills; deploy_codex_rules ;;
     claude)   deploy_claude ;;
   esac
 }
@@ -454,15 +495,21 @@ _dest_has_our_agents() {
   return 1
 }
 
+# Does this instructions file carry our rules block?
+_dest_has_our_rules() {
+  [[ -f "$1" ]] && grep -qF "$RULES_BLOCK_START" "$1"
+}
+
 # Has this tool actually received any skills content? (Used by cleanup
 # so it only prompts for tools that have something to remove.)
 detect_deployed() {
   case "$1" in
-    opencode) _dest_has_our_skills "$OPENCODE_SKILLS_DEST" || _dest_has_our_commands "$OPENCODE_COMMANDS_DEST" ;;
-    codex)    _dest_has_our_skills "$AGENTS_SKILLS_DEST" ;;
+    opencode) _dest_has_our_skills "$OPENCODE_SKILLS_DEST" || _dest_has_our_commands "$OPENCODE_COMMANDS_DEST" \
+                || _dest_has_our_rules "$OPENCODE_RULES_MD" ;;
+    codex)    _dest_has_our_skills "$AGENTS_SKILLS_DEST" || _dest_has_our_rules "$CODEX_RULES_MD" ;;
     claude)   _dest_has_our_skills "$CLAUDE_SKILLS_DEST" || _dest_has_our_commands "$CLAUDE_COMMANDS_DEST" \
                 || _dest_has_our_agents "$CLAUDE_AGENTS_DEST" \
-                || { [[ -f "$CLAUDE_MD" ]] && grep -qF "$RULES_BLOCK_START" "$CLAUDE_MD"; } ;;
+                || _dest_has_our_rules "$CLAUDE_MD" ;;
   esac
 }
 
@@ -601,6 +648,8 @@ run_clean_dispatch() {
     claude-commands)  clean_claude_commands ;;
     claude-agents)    clean_claude_agents ;;
     claude-rules)     clean_claude_rules ;;
+    codex-rules)      clean_codex_rules ;;
+    opencode-rules)   clean_opencode_rules ;;
     help|--help|-h)   usage ;;
     *)                echo "Unknown clean target: $1"; usage; exit 1 ;;
   esac
@@ -610,10 +659,11 @@ case "${1:-auto}" in
   auto)
     case "${2:-}" in -y|--yes|yes) run_auto yes ;; *) run_auto no ;; esac ;;
   -y|--yes)                run_auto yes ;;
-  opencode)                deploy_skills; deploy_commands ;;
-  codex)                   deploy_codex_skills ;;
+  opencode)                deploy_skills; deploy_commands; deploy_opencode_rules ;;
+  codex)                   deploy_codex_skills; deploy_codex_rules ;;
   claude)                  deploy_claude ;;
-  setup)                   deploy_all_skills && deploy_commands && deploy_claude && echo "Setup complete." ;;
+  setup)                   deploy_all_skills && deploy_commands && deploy_opencode_rules \
+                             && deploy_codex_rules && deploy_claude && echo "Setup complete." ;;
   clean)                   run_clean_dispatch "${2:-}" ;;
   deploy-skills)           deploy_skills ;;
   deploy-codex-skills)     deploy_codex_skills ;;
@@ -624,6 +674,8 @@ case "${1:-auto}" in
   deploy-claude-commands)  deploy_claude_commands ;;
   deploy-claude-agents)    deploy_claude_agents ;;
   deploy-claude-rules)     deploy_claude_rules ;;
+  deploy-codex-rules)      deploy_codex_rules ;;
+  deploy-opencode-rules)   deploy_opencode_rules ;;
   diff-skills)             diff_skills ;;
   diff-codex-skills)       diff_codex_skills ;;
   diff-commands)           diff_commands ;;
@@ -631,6 +683,8 @@ case "${1:-auto}" in
   diff-claude-commands)    diff_claude_commands ;;
   diff-claude-agents)      diff_claude_agents ;;
   diff-claude-rules)       diff_claude_rules ;;
+  diff-codex-rules)        diff_codex_rules ;;
+  diff-opencode-rules)     diff_opencode_rules ;;
   help|--help|-h)          usage ;;
   *)                       echo "Unknown command: $1"; usage; exit 1 ;;
 esac
