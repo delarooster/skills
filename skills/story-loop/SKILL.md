@@ -39,9 +39,10 @@ must return `blocked` with the reason instead.
 ## The orchestrator reads nothing
 
 You are the orchestrator. You **must not** read source files, diffs, verdict
-bodies, test output or CI logs, and you **must not** implement, commit, push or
-edit story files yourself. Derive every decision from story headers and the log
-using `scripts/loop-state.sh`. Full contract and budget:
+bodies, test output or CI logs, and you **must not** implement or edit story
+contents. The only write exception is the fixed state-folder moves and tasks-only
+state commits in [orchestrator.md](orchestrator.md). Derive every decision from
+story headers and the log using `scripts/loop-state.sh`. Full contract and budget:
 [orchestrator.md](orchestrator.md). That script has its own tests:
 `scripts/selftest.sh` and `scripts/e2e-chain.sh`, both safe to run anywhere.
 
@@ -53,7 +54,9 @@ host, so resolve it rather than assume it.
 
 1. **Load the adapter.** `tasks/story-loop.md` holds queue root, log path, base
    branch, stack mode, depth cap, forge and verifier. Missing? Probe and write it:
-   [adapter.md](adapter.md).
+   [adapter.md](adapter.md). If the adapter exists but its untracked log is missing,
+   stop for operator reconciliation before selecting work; a fresh checkout must
+   not recreate state while prior branches or pull requests may still be active.
 
 2. **Select.** `"$LS" eligible <queue-root> <log>` prints
    `id<TAB>deps<TAB>effort<TAB>path`, or nothing. Empty does not mean drained, so
@@ -73,9 +76,10 @@ host, so resolve it rather than assume it.
    `blocked :: unstacked`, not a warning: [chain.md](chain.md).
 
 6. **Verify**, if the adapter names a verifier. Wait for CI, dispatch by PR number
-   with a fresh context, then route on the returned escalation score: at or above
-   the adapter's threshold stop for a human, below it relay only blocking findings
-   to the same warm implementer. [orchestrator.md](orchestrator.md).
+   with a fresh context, then route BLOCKING holds on the returned escalation
+   score: at or above the adapter's threshold stop for a human, below it relay the
+   returned `BLOCKERS` value verbatim to the same warm implementer. Evidence holds
+   and MERGE AFTER FIXES stop outside score routing. [orchestrator.md](orchestrator.md).
 
 7. **Move the story file** per the folder state machine, then
    `"$LS" append <log> <9 fields>` exactly one row.
@@ -91,7 +95,8 @@ host, so resolve it rather than assume it.
 
 - Queue empty, and nothing reported by `stalled`
 - 2 consecutive stories return `blocked`
-- A verifier returns a hold verdict twice on the same pull request
+- A verifier still returns HOLD after remediation round 2
+- A verifier returns `HOLD_REASON: EVIDENCE` or `MERGE AFTER FIXES`
 - **A verifier returns an escalation score at or above the adapter's threshold.**
   Stop before remediating, not after: the point of the threshold is that a human
   sees the finding before anything responds to it
@@ -107,7 +112,8 @@ completed in the same iteration, that is two rows: the story's, then the stop.
 - [ ] Parent computed by the orchestrator, never by the implementer
 - [ ] Returned `BASE` checked against the supplied parent
 - [ ] Exactly one log row appended, including for blocked and escalated stories
-- [ ] Route taken from the escalation score alone, never from the summary
+- [ ] BLOCKING route taken from the escalation score alone, never from the summary
+- [ ] Evidence holds and MERGE AFTER FIXES stopped outside score routing
 - [ ] Story bodies opened: zero. Verdict files opened: zero. Diffs read: zero
 - [ ] Clean verdict closed out on the branch: story filed, verdict archived,
       nothing left in `tasks/reviews/` for the next iteration

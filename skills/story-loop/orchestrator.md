@@ -3,7 +3,9 @@
 ## Prohibitions
 
 **MUST NOT** read source files, diffs, verdict bodies, test output or CI logs.
-**MUST NOT** implement, commit, push or edit story files itself.
+**MUST NOT** implement or edit story contents. It may perform only the fixed story
+file moves below and tasks-only commits and pushes that persist those moves on the
+story branch.
 
 The point is not tidiness. The orchestrator that never reads a diff cannot talk
 itself into believing a story landed. It sees only what the subagent claims and
@@ -20,6 +22,13 @@ what the verifier independently found, and it verifies the one claim it can.
 6. Move the story file between state folders per the plan-project state machine.
 7. Append exactly one row to the log.
 8. Decide whether to continue.
+
+If an adapter already exists but its configured untracked log does not, stop for
+state reconciliation before selecting a story. A fresh checkout cannot infer which
+queued files already have active story branches or pull requests. Continue only
+after the operator restores the log or confirms the queue has no active work; then
+initialize a new log. This guard does not apply while creating an adapter on a
+genuine first run.
 
 If you ever need a story body to decide, the story is underspecified. Log
 `blocked :: underspecified` and move on. That is a planning defect, and repairing
@@ -48,7 +57,7 @@ folder is fixed:
 | `landed`, verifier not yet run | `4_in-review` | The pull request is open and unjudged. Work is done; review is not |
 | `landed`, clean verdict | `6_completed` | In the closeout commit, on the branch. See below |
 | `partial` | `4_in-review` | Same state, with the shortfall recorded in the log row |
-| `blocked` | `5_blocked` | Including underspecified, unstacked, bad return, and unsatisfiable dependency |
+| `blocked` | `5_blocked` | Including underspecified, unstacked, bad return, unsatisfiable dependency, evidence HOLD, MERGE AFTER FIXES, human escalation, and exhausted remediation |
 
 `6_completed` means merged, or on a branch whose only remaining step is the
 merge. The loop never merges, but it does not leave the filing to "whoever merges
@@ -73,6 +82,12 @@ the file out before appending the log row, so a resumed run sees a consistent tr
 Move the file **after** the implementer returns, never before. A story moved on
 spawn and then abandoned by a crashed subagent is invisible to both the queue and
 the log.
+
+The orchestrator performs the move without opening the story body. When a story
+branch exists, persist the move there in a tasks-only commit and push; this state
+commit does not trigger another verification because it cannot change reviewed
+behavior. Before a branch exists, leave the move in the shared checkout and never
+commit or push it to the base branch.
 
 ## Nothing eligible is not nothing left
 
@@ -139,20 +154,22 @@ reports the one gate with real signal as unverifiable, which is worse than not
 running it. If checks never appear, dispatch anyway and record their absence; the
 absence is itself a finding.
 
-Read back only five fields: verdict, blocking count, **escalation score**,
-one-line summary, verdict path. Never open the verdict file.
+Read back only seven fields: verdict, hold reason, blocking count, **escalation
+score**, one-line blockers handoff, one-line summary, verdict path. Never open the
+verdict file.
 
 ## Escalation
 
-The verifier scores each blocking finding 0-10 and returns the maximum as
-`ESCALATION`, or 0 when nothing blocks. The adapter's **escalation threshold**
-(default **8**) splits the routing:
+The verifier is the sole score authority. It scores each blocking finding 1-10
+from direct evidence and returns the maximum as `ESCALATION`, or 0 when nothing
+blocks. The orchestrator never recomputes that score. Only a validated
+`HOLD_REASON: BLOCKING` enters the table. The adapter's **escalation threshold**
+(default **8**) splits that routing:
 
 | Score | Route | Action |
 |---|---|---|
-| **>= threshold** | HUMAN | Stop the loop. Log `escalated :: <score>` with the PR and the one-line summary, and surface it. Do not remediate and do not start the next story |
-| **< threshold** | AUTO | Bounded remediation below, then continue |
-| **0** | AUTO | Nothing blocking. Log and continue |
+| **>= threshold** | HUMAN | Move the story to `5_blocked`, stop the loop, log `escalated :: <score>` with the PR and one-line summary, and surface it. Do not remediate or start the next story |
+| **1 <= score < threshold** | AUTO | Bounded remediation below, then continue |
 
 **Route on the number, never on the summary.** The summary is one line of prose you
 are allowed to relay; it is not evidence and must not change the route. If the
@@ -160,6 +177,20 @@ verifier returns no `ESCALATION` field, treat it as a non-conforming return and
 re-request once, then log `blocked :: bad return`. Do not infer a score from the
 verdict, and do not substitute your own judgement of severity: you have not read
 the findings, which is precisely why you are trusted to route them.
+
+`HOLD_REASON: EVIDENCE` is not a score route. Move the story to `5_blocked`, log
+`blocked :: evidence unavailable`, surface the summary, and stop before
+remediation or the next story. `MERGE AFTER FIXES` is also outside score routing:
+move the story to `5_blocked`, log `blocked :: non-blocking fixes`, surface the
+summary, and stop because the loop is not authorized to remediate SHOULD FIX
+findings.
+
+Require `EVIDENCE` with a HOLD verdict, zero blocking count, zero score, and
+`BLOCKERS: none`; `BLOCKING` with a HOLD verdict, positive count, positive score,
+and a BLOCKERS value other than empty or `none`; and `NONE` with zero count, zero
+score, and `BLOCKERS: none` on MERGE or MERGE AFTER FIXES. Require the returned
+verdict path to exist without opening it. Reject any other combination once for
+correction, then log `blocked :: bad return`.
 
 **The threshold spends a human's attention.** Every escalation is a claim that a
 person must look now. Every non-escalation is a claim that two automated rounds
@@ -169,19 +200,10 @@ anchored in the verifier definition rather than left to taste.
 Escalation never authorizes a merge, and it never removes the human from the merge.
 It decides only who reads the verdict.
 
-**Relay the scorer's `CONCERN:` line verbatim whatever the score, and never let it
-change the route.** A score measures how badly the pull request breaks the product;
-some findings matter for reasons the scale cannot express and will always score 0.
-A pre-existing defect the work merely uncovered, a fabricated citation, a claim the
-verifier could find no evidence for: the diff can be clean while the narrative
-around it is false. Relaying that line costs one line of output and is the only
-thing standing between a faithful score and a scale that gets inflated so somebody
-notices.
-
 ## Remediation rounds
 
-Blocking findings go back to the **same** implementer instance, warm, not to a new
-agent. A fix on warm context costs a fraction of a fresh spawn.
+Relay the verifier's `BLOCKERS` value verbatim to the **same** implementer instance,
+warm, not to a new agent. A fix on warm context costs a fraction of a fresh spawn.
 
 If no warm implementer exists, because the pull request was opened by an earlier
 run or by hand, spawn a fresh one briefed only on the blocking findings and the
@@ -190,8 +212,9 @@ weaker thing than a warm one, and the row is the only place that distinction
 survives.
 
 At most **2** rounds. Only findings the verifier marks blocking are actionable.
-The implementer may not edit the verdict file. After round 2 the story lands with
-whatever is left, and the leftovers go in the log row.
+The implementer may not edit the verdict file. If the verifier still returns HOLD
+after round 2, move the story to `5_blocked`, log `blocked :: remediation
+exhausted` with the leftovers, and stop.
 
 The risk being managed: a verifier that sees its own prior verdict addressed
 starts grading the response instead of the code. Fresh verifier context per round
@@ -206,7 +229,7 @@ Columns: `Story | Outcome | PR | Branch | Base | AC | CI | Verdict | Notes`.
 `Branch` and `Base` together are the chain.
 
 **Escalation rides in the `Verdict` cell**, as `<verdict>(<score>)`: `HOLD(9)`,
-`MERGE AFTER FIXES(4)`, `MERGE(0)`, `absent` when no verifier is configured. It is
+`MERGE AFTER FIXES(0)`, `MERGE(0)`, `absent` when no verifier is configured. It is
 not a tenth column, deliberately, because `LOG_COLS` in `loop-state.sh` is asserted
 by `scripts/selftest.sh` and a schema change there costs more than it buys. A run
 that escalated is then greppable: `grep -E '\((8|9|10)\)' <log>`.

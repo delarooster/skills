@@ -18,13 +18,14 @@ CLAUDE_DIR="$HOME/.claude"
 CLAUDE_SKILLS_DEST="$CLAUDE_DIR/skills"
 CLAUDE_COMMANDS_DEST="$CLAUDE_DIR/commands"
 CLAUDE_AGENTS_DEST="$CLAUDE_DIR/agents"
+CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
+RETIRED_CLAUDE_AGENTS="verdict-scorer.md:7125a86a199dde0ebc60ec9427925b8acf68860c3e0397f57d2e5816a4a5c11c"
 
 # Where each tool reads its global, always-on instructions. Every one of these
 # is a markdown file we merge into, never overwrite -- see RULES_BLOCK_START.
 #   Claude Code  ~/.claude/CLAUDE.md
 #   Codex        $CODEX_HOME/AGENTS.md          (CODEX_HOME defaults to ~/.codex)
 #   OpenCode     <global config dir>/AGENTS.md  (`opencode debug paths` -> config)
-CLAUDE_MD="$CLAUDE_DIR/CLAUDE.md"
 CODEX_RULES_MD="$CODEX_DIR/AGENTS.md"
 OPENCODE_RULES_MD="$OPENCODE_DIR/AGENTS.md"
 
@@ -98,9 +99,9 @@ Granular (explicit source-of-truth control / upgrades):
   diff-opencode-rules     Show drift between INSTRUCTIONS.md and the OpenCode rules block
   help                    Show this help message
 
-"Additive" targets (claude-*) never delete files they didn't create. They
-only add or update the skills/commands/agents/rules that come from this repo, so
-anything else you already have in ~/.claude is left alone.
+"Additive" targets (claude-*) never delete files they didn't create. They add or
+update current content and remove only unchanged, explicitly retired content from
+this repo, so anything else you already have in ~/.claude is left alone.
 
 Rules deployment is additive for every tool. INSTRUCTIONS.md is merged into the
 instructions file each tool already reads -- ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md,
@@ -137,6 +138,35 @@ _sync_additive() {
     cp -R "$src/." "$dest/"
     find "$dest" -name '.DS_Store' -delete
   fi
+}
+
+_sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  else
+    return 1
+  fi
+}
+
+_remove_retired_agents() {
+  local dest="$1" record name expected actual removed=0
+  [[ -d "$dest" ]] || return 0
+  for record in $RETIRED_CLAUDE_AGENTS; do
+    name="${record%%:*}"
+    expected="${record#*:}"
+    [[ -f "$dest/$name" && ! -L "$dest/$name" ]] || continue
+    if ! actual="$(_sha256_file "$dest/$name")"; then
+      echo "  Kept retired agent $name because no SHA-256 tool is available."
+    elif [[ "$actual" == "$expected" ]]; then
+      rm -f "${dest:?}/$name"
+      removed=$((removed + 1))
+    else
+      echo "  Kept modified retired agent $name."
+    fi
+  done
+  [[ "$removed" == 0 ]] || echo "  Removed $removed retired agent(s)."
 }
 
 _deploy_to() {
@@ -183,6 +213,7 @@ deploy_claude_commands() {
 
 deploy_claude_agents() {
   echo "Deploying agents → $CLAUDE_AGENTS_DEST (additive)"
+  _remove_retired_agents "$CLAUDE_AGENTS_DEST"
   _sync_additive "$CLAUDE_AGENTS_SRC" "$CLAUDE_AGENTS_DEST"
   count=$(find "$CLAUDE_AGENTS_SRC" -name '*.md' | wc -l | tr -d ' ')
   echo "Done. $count agent(s) synced. Anything else already in $CLAUDE_AGENTS_DEST is left untouched."
@@ -372,7 +403,7 @@ clean_claude_commands() {
 }
 
 _remove_named_agents() {
-  local dest="$1" f removed=0
+  local dest="$1" f removed=0 before
   if [[ ! -d "$dest" ]]; then
     echo "  (nothing at $dest)"
     return
@@ -383,6 +414,9 @@ _remove_named_agents() {
       removed=$((removed + 1))
     fi
   done
+  before=$(find "$dest" -maxdepth 1 -type f | wc -l | tr -d ' ')
+  _remove_retired_agents "$dest"
+  removed=$((removed + before - $(find "$dest" -maxdepth 1 -type f | wc -l | tr -d ' ')))
   rmdir "$dest" 2>/dev/null || true
   echo "  Removed $removed agent(s) from $dest"
 }
@@ -487,10 +521,17 @@ _dest_has_our_commands() {
 
 # Does dest contain any agent file this repo owns?
 _dest_has_our_agents() {
-  local dest="$1" f
+  local dest="$1" f record name expected actual
   [[ -d "$dest" ]] || return 1
   for f in "$CLAUDE_AGENTS_SRC"/*.md; do
     [[ -e "$dest/$(basename "$f")" ]] && return 0
+  done
+  for record in $RETIRED_CLAUDE_AGENTS; do
+    name="${record%%:*}"
+    expected="${record#*:}"
+    [[ -f "$dest/$name" && ! -L "$dest/$name" ]] || continue
+    actual="$(_sha256_file "$dest/$name")" || continue
+    [[ "$actual" == "$expected" ]] && return 0
   done
   return 1
 }

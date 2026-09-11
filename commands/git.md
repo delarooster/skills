@@ -25,6 +25,14 @@ that absence is itself a finding worth a verdict.
 date. It writes its verdict to `tasks/reviews/pr-<N>.md` and that file is the
 deliverable.
 
+**Validate the return.** Require the judge's exact seven fields and consistency
+rules: EVIDENCE means HOLD with zero blockers and score; BLOCKING means HOLD with
+positive blockers and score; NONE means MERGE or MERGE AFTER FIXES with zero
+blockers and score. Require `BLOCKERS: none` whenever blockers are zero and require
+a nonempty BLOCKERS value other than `none` whenever blockers are positive. Require
+the returned path to exist. Re-request a malformed return once, then report it and
+stop without closeout.
+
 **Re-judge on later pushes too**, not only at creation. A PR that gained commits
 since its last verdict has a stale verdict. Compare against the head sha recorded
 in the existing verdict file; if it differs, judge again and overwrite.
@@ -51,10 +59,11 @@ the user's to triage does not reach it -- filing your own paperwork is not actin
 on a finding. A closeout that waits to be nudged is the mess it exists to prevent,
 one round later.
 
-**Only on a clean verdict** -- MERGE, zero blocking findings. A MERGE AFTER FIXES
-gets fixed and re-judged first, and *that* fix does need the user, because it
-changes reviewed behaviour. The closeout is the last thing on the branch, never a
-way to tidy past an open finding.
+**Only on a clean verdict** -- MERGE, HOLD_REASON NONE, zero blocking findings,
+zero escalation, and `BLOCKERS: none`. A MERGE AFTER FIXES gets fixed and re-judged
+first, and *that* fix does need the user, because it changes reviewed behaviour.
+The closeout is the last thing on the branch, never a way to tidy past an open
+finding.
 
 **One commit, on the branch, before the merge.** It contains:
 
@@ -84,8 +93,8 @@ Report what was filed and where. Then the branch is genuinely done.
 
 ## Reporting back
 
-Report the verdict, the blocking count, and the path to the verdict file. When a
-closeout ran, name what it filed.
+Report the verdict, hold reason, blocking count, and path to the verdict file. When
+a closeout ran, name what it filed.
 
 Do not fix what the judge found, do not stage the fixes, and do not reopen the
 commit you just made. The closeout above is not an exception to this: it files

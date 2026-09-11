@@ -60,7 +60,7 @@ Read your instructions in ~/repos/skills folder to understand the project and th
 
 **Claude Code:**
 
-Run `./setup.sh deploy-claude` (or plain `./setup.sh`). This deploys skills to `~/.claude/skills`, commands to `~/.claude/commands`, Claude agents to `~/.claude/agents`, and merges `INSTRUCTIONS.md` into `~/.claude/CLAUDE.md` (global memory, read every session) inside an auto-managed block — additive, so nothing else already in `~/.claude` is touched.
+Run `./setup.sh deploy-claude` (or plain `./setup.sh`). This deploys skills to `~/.claude/skills`, commands to `~/.claude/commands`, Claude agents to `~/.claude/agents`, and merges `INSTRUCTIONS.md` into `~/.claude/CLAUDE.md` (global memory, read every session) inside an auto-managed block — additive, so only current or explicitly retired files owned by this repository are touched.
 
 **Other Tools:**
 
@@ -101,7 +101,6 @@ Domain-specific conventions and workflows that load only when triggered. This re
 Portable Claude Code subagents are deployed additively to `~/.claude/agents`.
 
 - **pr-judge.md** - Independent, evidence-backed pull request reviewer
-- **verdict-scorer.md** - Routes an existing pull request verdict by escalation score
 
 ## Key Features
 

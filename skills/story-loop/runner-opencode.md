@@ -23,13 +23,15 @@ Manual, same as Codex. Create the worktree from the computed parent and pass
 ```bash
 git worktree add -b "$BRANCH" "$WORKTREE" "$REMOTE/$PARENT"
 opencode run --dir "$WORKTREE" "$BRIEF"
-git worktree remove "$WORKTREE"
 ```
+
+Keep the worktree through verification, remediation, and the final story-state
+commit, then remove it.
 
 ## Resume warm for remediation
 
 ```bash
-opencode run --session <session-id> "<blocking findings, verbatim>"
+opencode run --session <session-id> "<BLOCKERS value, verbatim>"
 ```
 
 `--continue` resumes the last session, and `--fork` branches a session instead of

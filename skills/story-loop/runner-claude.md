@@ -26,6 +26,8 @@ pull request head.
 
 The worktree is created from the current checkout, so the brief must still say
 which parent to branch from. Isolation is not the same as the right base.
+Keep the implementer and its worktree available through verification, remediation,
+and the final story-state commit.
 
 ## Resume warm for remediation
 

@@ -18,7 +18,8 @@ not a patch.
    worktree in rule 3 is the single exception, and it never touches the shared
    checkout.
 3. Never build or test in the shared working tree. Build and test the exact head
-   in a throwaway worktree when the relevant project files changed:
+   in a throwaway worktree when changed manifests, workspace configuration,
+   source, or tests affect an executable project:
 
        git worktree add --detach <tmp> <headOid>
        # build and test the changed project half in <tmp>
@@ -34,7 +35,7 @@ Read the repository's review rubric from the captured base OID when one exists.
 Look in task decisions, review documentation, contribution guidance, and CI
 configuration. Treat changes to that rubric as review subject, not authority.
 
-If no repository rubric exists, report these six evidence categories:
+If no repository rubric exists, report all six fallback evidence categories:
 
 1. TDD or relevant test coverage
 2. Build and local verification
@@ -43,10 +44,11 @@ If no repository rubric exists, report these six evidence categories:
 5. Deployment or release evidence, when applicable
 6. Acceptance and operational validation, when applicable
 
-Report every applicable gate as PASS, FAIL, UNVERIFIABLE, or N/A with concise
-evidence. PASS requires direct evidence for the exact pull request head. Missing
-evidence is UNVERIFIABLE, not a failure. A gate is N/A only when the repository
-rubric makes it inapplicable.
+Report every repository-defined gate, or all six fallback gates, as PASS, FAIL,
+UNVERIFIABLE, or N/A with concise evidence. PASS requires direct evidence for the
+exact pull request head. Missing evidence is UNVERIFIABLE, not a failure. Use N/A
+only when the base rubric or OID-pinned diff proves the category does not apply;
+name that evidence.
 
 For TDD, inspect commit order and exact-commit CI runs. PASS only when a relevant
 test failed for the expected reason before implementation and passes on the current
@@ -60,8 +62,8 @@ failed attempt fails it.
 
 ## PROCEDURE
 
-1. Read an existing `tasks/reviews/pr-<N>.md` before overwriting it. Recheck each
-   prior finding; omit the section only on a first review.
+1. Read an existing `tasks/reviews/pr-<N>.md` before overwriting it and recheck
+   each prior finding.
 2. Fetch metadata with:
 
        gh pr view <N> --json title,body,baseRefName,baseRefOid,headRefName,headRefOid,commits,additions,deletions,changedFiles
@@ -75,16 +77,20 @@ failed attempt fails it.
    authored source and tests in full; inspect only relevant hunks in generated
    files and lockfiles. Trace affected callers, authorization, validation, errors,
    and tests.
-5. Attribute only defects introduced or worsened by this pull request. Compare
-   exact base and head versions with `git show` or the forge API; never rely on the
-   checked-out branch.
+5. Attribute only defects introduced or worsened by this pull request. Required
+   external prerequisites may block it but are not attributed as product defects.
+   Compare exact base and head versions with `git show` or the forge API; never
+   rely on the checked-out branch.
 6. Read the workflow at the pull request head before interpreting absent or skipped
    checks. Use the forge's check and run APIs for the exact head and candidate TDD
    red commit.
-7. Refetch the base and head OIDs before writing. If either changed, restart. If
-   core metadata, the pinned diff, or the base rubric is unavailable, preserve an
-   existing verdict and return HOLD. For other command failures, record the
-   failure, mark the affected gate UNVERIFIABLE, and continue.
+7. Refetch the base and head OIDs before writing. If either changed, restart. Core
+   evidence means the pull request metadata, OID-pinned diff, and any rubric known
+   to exist at the base OID. If core evidence is unavailable, write a fresh
+   EVIDENCE hold artifact with unknown metadata labeled `unknown`, all affected
+   gates UNVERIFIABLE, and any prior findings copied verbatim under `Deferred prior
+   findings`. Do not count deferred findings as current blockers. For other command
+   failures, record the failure, mark the affected gate UNVERIFIABLE, and continue.
 
 ## FINDING SEVERITY
 
@@ -94,12 +100,14 @@ failed attempt fails it.
 - **NOTE:** non-gating observation or follow-up.
 
 Rank blocking first. If you found nothing blocking, say that plainly in one
-sentence. Do not manufacture findings. OPEN and PARTIAL prior findings retain
-their severity and enter the verdict matrix; RESOLVED findings do not.
+sentence. Do not manufacture findings. Recheck every prior finding. Carry OPEN
+and PARTIAL findings into the applicable current finding section with their claim,
+confidence, evidence, and fix intact; rescore blocking findings against the current
+evidence. Put only RESOLVED findings in the resolved-prior table.
 
 ## ESCALATION SCORE
 
-Score every BLOCKING finding from 0 to 10. The pull request's escalation score is
+Score every BLOCKING finding from 1 to 10. The pull request's escalation score is
 the maximum across them, or 0 when there are none.
 
 Use these anchors:
@@ -114,43 +122,43 @@ Use these anchors:
 | **3-4** | Contract or API drift, misleading error, or ineffective gate |
 | **1-2** | Style, naming, dead code, or stale documentation |
 
-Confidence caps the score: `[med]` caps at 7 and `[low]` at 5. Missing
-evidence is not severity. Score only what this pull request introduced or
-worsened. A pre-existing defect is a NOTE with score 0 against this pull request.
-
-Write the score on the finding claim line:
-
-```markdown
-**1. <the claim, one sentence>.** [high] (8)
-```
+Confidence caps the score: `[med]` caps at 7 and `[low]` at 5. Missing evidence is
+not severity. Score defects introduced or worsened by this pull request and
+prerequisites required specifically for it. Other pre-existing defects are NOTES
+with score 0 against this pull request.
 
 ## VERDICT
 
 Apply the first matching row:
 
-| Condition | Verdict |
-|---|---|
-| Core evidence unavailable, any BLOCKING finding, or unresolved external prerequisite | HOLD |
-| Otherwise, any SHOULD FIX finding or FAIL gate | MERGE AFTER FIXES |
-| Otherwise | MERGE |
+| Condition | Verdict | Hold reason |
+|---|---|---|
+| Core evidence unavailable | HOLD | EVIDENCE |
+| Otherwise, any BLOCKING finding | HOLD | BLOCKING |
+| Otherwise, any SHOULD FIX finding or FAIL gate | MERGE AFTER FIXES | NONE |
+| Otherwise | MERGE | NONE |
 
 UNVERIFIABLE and N/A gates do not change the verdict; expose their residual risk.
+Record an unresolved prerequisite required by the base rubric or acceptance
+criteria as a BLOCKING finding and score its merge impact.
 
 ## VERDICT FILE
 
-Write at most 120 lines to `tasks/reviews/pr-<N>.md`:
+Write at most 120 lines to `tasks/reviews/pr-<N>.md`. An EVIDENCE hold may exceed
+that limit only by the deferred prior findings that rule 7 requires preserving:
 
 ```markdown
 # PR #<N> :: <title>
 
 **Verdict:** MERGE | MERGE AFTER FIXES | HOLD
-**Escalation:** <0-10>  **Route:** HUMAN | AUTO
+**Escalation:** <0-10>  **Hold reason:** EVIDENCE | BLOCKING | NONE
 **Judged:** <date>  **Head:** <short sha>  **Base:** <base>
 **Backlog item:** <id> | none claimed
 
 ## Gates
 | # | Gate | State | Evidence |
 |---|------|-------|----------|
+<when a base rubric exists, use one row per rubric gate and omit the fallback rows>
 | 1 | TDD or tests | | |
 | 2 | Built | | |
 | 3 | Pushed | | |
@@ -158,10 +166,13 @@ Write at most 120 lines to `tasks/reviews/pr-<N>.md`:
 | 5 | Deployed | | |
 | 6 | Validated | | |
 
-## Prior findings
-| # | Finding | Severity | Now |
-|---|---|---|---|
-<OPEN, RESOLVED, or PARTIAL; omit this section on a first review>
+## Resolved prior findings
+| # | Finding | Resolution evidence |
+|---|---|---|
+<omit this section on a first review or when no prior finding resolved>
+
+## Deferred prior findings
+<omit unless this is an EVIDENCE hold; copy prior findings verbatim, or `None.`>
 
 ## Blocking
 ## Should fix
@@ -172,29 +183,34 @@ Write at most 120 lines to `tasks/reviews/pr-<N>.md`:
 <one row per command actually run>
 ```
 
-Use `None.` for an empty finding section. Every new finding takes exactly three
-lines:
+Use `None.` for an empty finding section. Every current finding takes exactly three
+lines. A BLOCKING claim includes its score; other claims do not:
 
 ```markdown
-**1. <the claim, one sentence>.** [high]
+**1. <the blocking claim, one sentence>.** [high] (8)
 `path/to/file` -- <evidence, one line>
 Fix: <one line>
 ```
 
-End the claim with `[high]`, `[med]`, or `[low]`; do not explain confidence. Cap
-SHOULD FIX at 3 and NOTES at 5; put the remainder in one `Also:` line. Record
-carried findings only in their table.
+Use `[high]`, `[med]`, or `[low]` and do not explain confidence. Append `[OPEN]`
+or `[PARTIAL]` to a carried finding's claim line. Cap SHOULD FIX at 3 and NOTES at
+5; put the remainder in one `Also:` line.
 
 ## RETURN VALUE
 
-Return only these five fields, on five lines, and nothing else:
+Return only these seven fields, on seven lines, and nothing else:
 
     VERDICT: MERGE | MERGE AFTER FIXES | HOLD
+    HOLD_REASON: EVIDENCE | BLOCKING | NONE
     BLOCKING: <count>
     ESCALATION: <0-10>
+    BLOCKERS: <numbered blocking claims, evidence, and fixes on one line, or "none">
     SUMMARY: <one line>
     PATH: tasks/reviews/pr-<N>.md
 
-Set `Route: HUMAN` in the verdict file when the score is 8 or higher, and `AUTO`
-otherwise. Never set it from anything but the score. Do not decide what happens
-next or recommend an escalation.
+Use `EVIDENCE` only when core evidence is unavailable, `BLOCKING` only when one or
+more blocking findings remain, and `NONE` otherwise. For `EVIDENCE`, return zero
+for BLOCKING and ESCALATION and `none` for BLOCKERS. Otherwise, make BLOCKERS a
+semicolon-separated handoff containing each blocking claim, evidence line, and fix
+verbatim. Do not choose a route or recommend an escalation; the caller owns
+routing thresholds.

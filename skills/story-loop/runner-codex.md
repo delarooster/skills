@@ -24,16 +24,16 @@ to `--cd`:
 ```bash
 git worktree add -b "$BRANCH" "$WORKTREE" "$REMOTE/$PARENT"
 codex exec --cd "$WORKTREE" "$BRIEF"
-git worktree remove "$WORKTREE"
 ```
 
-Removal is the orchestrator's job. A crashed child leaves the worktree behind, and
-`git worktree prune` is the recovery.
+Keep the worktree through verification, remediation, and the final story-state
+commit, then remove it. Removal is the orchestrator's job. A crashed child leaves
+the worktree behind, and `git worktree prune` is the recovery.
 
 ## Resume warm for remediation
 
 ```bash
-codex exec resume <session-id> "<blocking findings, verbatim>"
+codex exec resume <session-id> "<BLOCKERS value, verbatim>"
 ```
 
 `codex exec resume --last` also works when only one child is in flight, which is

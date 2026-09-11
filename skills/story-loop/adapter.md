@@ -41,10 +41,13 @@ runs in exactly this mode.
 ```
 
 The threshold is the score at or above which the loop stops for a human instead of
-remediating. It requires a verifier that returns an `ESCALATION` field; with
-`Verifier: none` it is inert. Setting it to `0` escalates everything, which is the
-old behaviour of stopping on any blocking finding. Setting it above `10` never
-escalates, which is a choice worth making deliberately or not at all.
+remediating. It requires a verifier that satisfies the seven-field return contract
+in [orchestrator.md](orchestrator.md), including `HOLD_REASON`, `ESCALATION`, and
+`BLOCKERS`; with `Verifier: none` it is inert. Setting it to `0` escalates every
+BLOCKING hold, as does `1` because blocking scores start there. Setting it above
+`10` never escalates a BLOCKING hold, which is a choice worth making deliberately
+or not at all. MERGE, MERGE AFTER FIXES, and evidence-blocked HOLDs never enter
+threshold routing.
 
 ## Why not arguments
 
