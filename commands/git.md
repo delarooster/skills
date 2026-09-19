@@ -73,7 +73,12 @@ finding.
 - `tasks/reviews/pr-<N>.md` moved to `tasks/archive/reviews/pr-<N>.md`.
 - Any other verdict still in `tasks/reviews/` whose pull request has since merged
   or closed. Check each with `gh pr view <N> --json state`. Do not assume.
-- `CURRENT.md` brought current: the queue item struck through, the next one named.
+- `CURRENT.md` brought current: the queue item struck through and the next one named,
+  **and nothing else.** One line changed, occasionally two. A closeout does not add a
+  section to `CURRENT.md`, does not narrate what the pull request did, and does not
+  record what the judge found. The PR body and the archived verdict already hold both,
+  and both are already linked from the story. Report it to the user instead of filing it
+  into the queue.
 
 **Why on the branch rather than after the merge.** The commit asserts a state
 that is false as you write it and true the instant it lands, because the only way
