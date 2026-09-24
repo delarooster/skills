@@ -28,3 +28,13 @@ When a working branch is ready to merge:
 ### AI Agent Behavior
 
 AI agents must NOT merge into `develop` locally and push. Always create a PR using `gh pr create` or instruct the user to open one.
+
+### Open PRs as drafts
+
+CI commonly skips its most expensive jobs -- container builds, end-to-end suites --
+for draft pull requests, and those are most of what a run costs. Open with
+`gh pr create --draft` while a change is still being iterated on and mark it ready
+once. Not every PR needs it; one that will take more than a push or two does.
+
+An automated loop opens **every** pull request as a draft and never marks one ready.
+A human does that, immediately before landing the stack.

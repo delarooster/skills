@@ -27,15 +27,22 @@ BRANCH FROM THE PARENT, NOT FROM WHAT IS CHECKED OUT:
 Implement the story test-first. Tick acceptance criteria in the story file only
 when the test that proves them passes.
 
-OPEN THE PULL REQUEST AGAINST THE PARENT. The --base flag is required and has no
-safe default:
-  <FORGE> pr create --base <PARENT> ...
+OPEN THE PULL REQUEST AGAINST THE PARENT, AS A DRAFT. The --base flag is required
+and has no safe default; --draft is required because CI commonly skips its most
+expensive jobs for drafts, and a loop is the biggest spender there is:
+  <FORGE> pr create --draft --base <PARENT> ...
 State the stack position in the body: the parent pull request number, or
 "roots at <PARENT>" if this is the first in the chain.
 If FORGE is none, stop after pushing the branch.
 
+VERIFY LOCALLY BEFORE YOU OPEN IT, and state in the body what you ran and what it
+reported -- counts, not adjectives. A draft's cheap checks do not cover
+integration, so that proof is yours to produce and nothing downstream reproduces
+it. Claiming a run you did not do is the one unrecoverable dishonesty here.
+
 Wait until CI leaves a pending state, or roughly four minutes, then stop. Do not
-merge. Do not touch any branch but your own.
+merge, and never mark a pull request ready for review. Do not touch any branch but
+your own.
 
 YOU ARE AUTHORIZED TO: create your branch, commit, push that branch, open the
 pull request, and move the story file between state folders.

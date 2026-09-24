@@ -158,6 +158,24 @@ docs/                      # Generated documentation
 - Task breakdown files in organized folders
 - Documentation in `docs/` folder
 
+## Archiving
+
+**Archiving lifts content out of a file. It never deletes the file.**
+
+A decision log, an execution-order document or a story file is linked to from
+everywhere else. Replacing one with a dated snapshot at a new path breaks every
+link pointing at it, silently, and the breakage surfaces later as an agent reading
+nothing and carrying on.
+
+On 2026-09-24 an archive pass in one repo snapshotted the decision log and the
+execution order and then deleted both. 176 files linked to the first and 59 to the
+second. Its own archive note said the live file should keep every heading, so the
+deletion contradicted the plan written moments earlier.
+
+So: snapshot if you like, trim the live file down to what still matters, and leave
+it exactly where everything expects to find it. If a file genuinely should stop
+existing, that is a decision for a human, not a side effect of tidying.
+
 ## Getting Started
 
 **First time:**
