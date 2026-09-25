@@ -1,188 +1,77 @@
 # Skills
 
-Workspace-wide AI behavior rules and on-demand agent skills for consistent development patterns across all projects.
+The agent skills, commands, and guardrails I use every day to ship production software with **Claude Code**, **Codex**, and **OpenCode**. Write them once, deploy them to every tool.
 
-## Repository Structure
+- **Small context.** Skills load on demand. Only one-line descriptions sit in context at startup.
+- **Guardrails.** Git writes need an explicit command. Nothing publishes without approval.
+- **Measured.** Instruction changes are scored before and after, not eyeballed.
 
-```
-skills/
-├── INSTRUCTIONS.md          → AI behavior rules and git security lockdown
-├── setup.sh                 → Deploy skills, commands, and rules to opencode, codex/agents, and claude
-├── cleanup.sh               → Remove deployed content (surgical: only files this repo owns)
-├── docs/                    → Process guidance for working with AI
-├── rules/                   → Skills catalog (slim index)
-├── commands/                → Slash commands (source of truth)
-│   ├── startup.md           → Bootstrap session and resume task state
-│   ├── begin.md             → Convert scratchpad notes into tracked tasks
-│   ├── clean.md             → Archive work and reset for next session
-│   ├── git.md               → Branch, commit, push, open PR
-│   ├── story-loop.md        → Run one queue-driven implementation iteration
-│   ├── eval.md              → Score instruction set quality
-│   ├── cs-init.md           → Initialize cold-start project files
-│   ├── cs-work.md           → Cold-start work session
-│   └── cs-decide.md         → Cold-start decision mode
-├── agents/                  → Claude Code agents (source of truth)
-└── skills/                  → On-demand agent skills (source of truth)
-    ├── story-loop/          → Queue-driven implementation loop with stacked PRs
-    ├── terraform/           → OpenTofu/Terraform conventions
-    ├── tdd/                 → Test-driven development workflow and patterns
-    ├── plan-project/        → Epic/story planning from initiative goals
-    ├── git-conventions/     → Branch naming, commits, PR workflows
-    ├── cold-start/          → Ephemeral session protocol
-    └── wrap/                → Session closing ritual
-```
-
-## Quick Start
-
-### 1. Setup Location
-
-Clone to `~/repos` for consistent workspace organization:
+## Quick start
 
 ```bash
-mkdir -p ~/repos
-cd ~/repos
-git clone <repository-url> skills
+git clone https://github.com/delarooster/skills ~/repos/skills
+cd ~/repos/skills
+./setup.sh      # detects installed tools, prompts per tool (-y to accept all)
+./cleanup.sh    # removes only what this repo deployed
 ```
 
-### 2. Configure AI Tool
+Clone to `~/repos/skills`: commands reference that path. `./setup.sh help` lists per-tool targets. Then run `/startup` in any project.
 
-**OpenCode:**
+## What's inside
 
-Create `.opencode/commands/startup.md` in your project:
+| Path | Contents |
+|---|---|
+| `INSTRUCTIONS.md` | Global rules: session start, task tracking, git lockdown |
+| `skills/` | On-demand skills (below) |
+| `commands/` | `/startup`, `/begin`, `/clean`, `/git`, `/story-loop`, `/eval`, `/cs-init`, `/cs-work`, `/cs-decide` |
+| `agents/pr-judge.md` | Independent pull request reviewer |
+| `docs/` | Process guides, the eval framework, and eval reports |
 
-```markdown
----
-description: Load project context and skills
----
+**Workflow**
 
-Read your instructions in ~/repos/skills folder to understand the project and the context.
+| Skill | Purpose |
+|---|---|
+| `story-loop` | Drain a story queue: fresh subagent per story, stacked PRs, independent verifier |
+| `plan-project` | Break goals into epics and stories (the queue `story-loop` drains) |
+| `tdd` | Red-green-refactor with behavior-focused tests |
+| `git-conventions` | Branch, commit, and PR conventions |
+| `cold-start` | Stateless sessions: read state, work, write state, exit |
+| `wrap` | Close a session by recording state, not narrative |
+
+**Infrastructure as Code**
+
+| Skill | Purpose |
+|---|---|
+| `terraform` | Layout, typed and validated variables, tagging, and a plan/apply test strategy for `tofu test` |
+| `bicep` | `existing` over `resourceId()`, hub/spoke private DNS, verbose naming |
+| `bicep-modules` | Semver rules that detect interface changes before a module publishes |
+
+## Story loop
+
+```mermaid
+flowchart LR
+  Q[Story queue] --> I[Fresh subagent implements]
+  I --> P[Stacked draft PR]
+  P --> J[PR judge builds and tests the exact commit]
+  J -->|no blocking findings| R[Ready for human merge]
+  J -->|blocking, below threshold| F[Auto-fix, max 2 rounds]
+  F --> J
+  J -->|at or above threshold| H[Human review]
 ```
 
-**Claude Code:**
-
-Run `./setup.sh deploy-claude` (or plain `./setup.sh`). This deploys skills to `~/.claude/skills`, commands to `~/.claude/commands`, Claude agents to `~/.claude/agents`, and merges `INSTRUCTIONS.md` into `~/.claude/CLAUDE.md` (global memory, read every session) inside an auto-managed block — additive, so only current or explicitly retired files owned by this repository are touched.
-
-**Other Tools:**
-
-Add to custom instructions:
-```
-Read your instructions in ~/repos/skills folder to understand the project and the context.
-```
-
-### 3. Read Process Documentation
-
-See [docs/getting-started.md](docs/getting-started.md) and [docs/task-management.md](docs/task-management.md) for workflow guidance.
-
-## What's Included
-
-### INSTRUCTIONS.md
-AI behavior rules enforced across all sessions:
-- Repository context protocol (identify working directory at session start)
-- Robot communication protocol (terse, concise, no enthusiasm)
-- Git operations lockdown (no autonomous commits/pushes)
-- Required reading directives
-
-### docs/
-Process guidance for effective AI-assisted development:
-- **getting-started.md** - Setup and first use
-- **task-management.md** - Brain dump workflow and context persistence
-
-### skills/ (On-Demand Agent Skills)
-Domain-specific conventions and workflows that load only when triggered. This repo is the **source of truth** — edit skills here, then deploy to your AI tool's global config with `./setup.sh deploy-skills`.
-
-- **terraform/** - Infrastructure code structure, style, and testing patterns
-- **tdd/** - Behavior-focused test-driven development workflow and patterns
-- **plan-project/** - Epic/story creation from initiative goals
-- **git-conventions/** - Branch naming, commit format, PR workflows
-- **cold-start/** - Ephemeral session protocol (stateless read/work/write cycles)
-- **wrap/** - Session closing ritual (persist context to tasks/current.md)
-
-### agents/ (Claude Code Agents)
-Portable Claude Code subagents are deployed additively to `~/.claude/agents`.
-
-- **pr-judge.md** - Independent, evidence-backed pull request reviewer
-
-## Key Features
-
-### Git Security Lockdown
-AI agents cannot autonomously:
-- Commit code without explicit approval
-- Push to remote without confirmation
-- Force push, amend commits, or bypass hooks
-- Modify git configuration
-
-All git operations require explicit user commands.
-
-### Robot Communication Mode
-AI uses terse, technical communication:
-- No enthusiasm or congratulations
-- Direct status reporting
-- Multiple options for decisions
-- Clear action statements
-
-### Brain Dump Workflow
-Create persistent context files (CONTEXT.md, main.md) that survive session boundaries:
-- Document project goals before generating code
-- Generate reviewable markdown artifacts first
-- New sessions read brain dump to restore context
-
-See [docs/task-management.md](docs/task-management.md) for detailed workflow.
-
-## Available Skills
-
-See [rules/README.md](rules/README.md) for the skills catalog with trigger phrases.
-
-Skills load on-demand — only the skill descriptions (~1 line each) are visible at startup. Full reference material loads when triggered, saving ~1,300 lines of context tokens per session.
-
-## Usage
+The orchestrator never reads source, diffs, or logs, so its context stays flat across long runs. The judge is independent: it returns an evidence-backed verdict, never a patch.
 
 ```bash
-# Easy path: scan for installed tools (OpenCode, Codex, Claude Code) and
-# prompt per tool before deploying skills, commands, and rules to each.
-./setup.sh
-./setup.sh -y                    # accept all detected tools, no prompts
-
-# Explicit single tool
-./setup.sh opencode
-./setup.sh codex
-./setup.sh claude
-
-# Granular targets (for upgrades / source-of-truth control).
-# Claude Code (~/.claude) is additive: only adds/updates this repo's own
-# skills, commands, and rules block; never deletes anything else you have.
-./setup.sh deploy-skills
-./setup.sh deploy-commands
-./setup.sh deploy-claude-skills
-./setup.sh deploy-claude-commands
-./setup.sh deploy-claude-agents
-./setup.sh deploy-claude-rules   # merges INSTRUCTIONS.md into ~/.claude/CLAUDE.md
-./setup.sh help                  # full command list
-
-# Undo / iterate: remove what was deployed. Name-based and surgical — only
-# files this repo owns are deleted, and only the delimited rules block is
-# stripped from ~/.claude/CLAUDE.md. Your own skills/commands/notes stay.
-./cleanup.sh                     # scan for deployed content, prompt per tool
-./cleanup.sh -y                  # remove from all detected, no prompts
-./cleanup.sh claude              # remove from one tool
-./cleanup.sh claude-agents       # remove only this repo's Claude agents
-./cleanup.sh claude-rules        # strip only the CLAUDE.md rules block
-
-# In your project
-/startup
-
-# AI identifies repository and loads workspace rules
-# Output: "REPOSITORY: your-project | WORKSPACE RULES: skills"
-
-# AI adopts robot behavior and lockdown mode
-
-# Create brain dump file for project context
-"Create CONTEXT.md explaining this project"
-
-# Review, then approve work
-"Proceed with implementation"
+bash skills/story-loop/scripts/selftest.sh    # state machine
+bash skills/story-loop/scripts/e2e-chain.sh   # end-to-end chain in a throwaway repo
 ```
 
-## Documentation
+## Evals
 
-- [Getting Started](docs/getting-started.md) - Setup and configuration
-- [Task Management](docs/task-management.md) - Brain dump workflow and process
+`/eval` scores instruction files on six weighted dimensions: directive density, contradictions, redundancy, specificity, coverage, and token efficiency. Composite is out of 2.00. Reports live in [`docs/evals/`](docs/evals); the story-loop skill went from 1.20 to 1.65.
+
+Framework: [docs/evaluation-framework.md](docs/evaluation-framework.md).
+
+## License
+
+[MIT](LICENSE)
