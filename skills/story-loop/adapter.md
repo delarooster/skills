@@ -15,6 +15,10 @@ read on every run after. It never ships with the skill.
 | Forge | forge CLI if a matching remote, else ask | `none` |
 | Verifier | repo-declared reviewer agent, else none | `none` |
 | Escalation threshold | only meaningful with a verifier | `8` |
+| Teams | never probed; declared by the operator | absent: one implicit team |
+| Lanes | never probed | `1` |
+| Stack lock | required only when lanes < teams | none |
+| Phase-1 cap | never probed | the team count |
 
 Ask at most once per field, then write the answers and never ask again. A repo
 with an adapter is configured; a repo without one configures itself on first use.
@@ -48,6 +52,36 @@ BLOCKING hold, as does `1` because blocking scores start there. Setting it above
 `10` never escalates a BLOCKING hold, which is a choice worth making deliberately
 or not at all. MERGE, MERGE AFTER FIXES, and evidence-blocked HOLDs never enter
 threshold routing.
+
+## Teams and lanes
+
+Optional. With no `Teams` table the loop runs exactly as described everywhere
+else: one implicit team, one story in flight. Behaviour: [orchestrator.md](orchestrator.md#teams-and-lanes).
+
+```markdown
+| Lanes | 1 |
+| Stack lock | <path outside the repo, untracked like the log> |
+| Phase-1 cap | 3 |
+
+## Teams
+
+| Team | Surface | Stories |
+|---|---|---|
+| api | server code | S.03, S.01, S.04 |
+| web | client code | T.02, T.05 |
+```
+
+| Field | Meaning |
+|---|---|
+| `Team` | Name used in `"$LS" eligible ... --team <name> <adapter>` and the brief's `TEAM:` slot |
+| `Surface` | The paths or area the team owns. Teams with overlapping surfaces conflict, so do not declare them |
+| `Stories` | Ordered ids, comma or space separated. Table order replaces queue order for that team. An id in no team is never dispatched while the table exists |
+| `Lanes` | How many shared runtimes (stack, database, end-to-end environment) can run at once |
+| `Stack lock` | File the orchestrator writes to grant a lane. Untracked, for the same reason the log is |
+| `Phase-1 cap` | Most implementers working without a lane at once. Caps cost, not correctness |
+
+`"$LS" teams <adapter>` prints `team<TAB>id,id,...` per team; empty means one
+implicit team.
 
 ## Why not arguments
 

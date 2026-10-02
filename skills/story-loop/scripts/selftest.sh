@@ -148,6 +148,65 @@ eq "head survives a restart" "feat/z-02" "$("$LS" head "$LOG" "$BASE")"
 eq "a resumed story stacks on the chain, not the base" "feat/z-02" \
    "$("$LS" parent "$LOG" "$BASE" linear None)"
 
+echo "== teams: per-team heads from the adapter's Teams table =="
+Q="$WORK/teams"; TLOG="$WORK/teams-log.md"; AD="$WORK/story-loop.md"
+mkdir -p "$Q/1_backlog" "$Q/2_ready" "$Q/6_completed"
+story 2_ready     t-01.md T.01 None 1
+story 2_ready     t-02.md T.02 None 1
+story 1_backlog   t-03.md T.03 None 1
+story 1_backlog   t-04.md T.04 T.01 1
+story 1_backlog   t-05.md T.05 T.04 1
+story 6_completed t-00.md T.00 None 1
+cat > "$AD" <<'EOF'
+# story-loop adapter
+
+| Field | Value |
+|---|---|
+| Base branch | develop |
+| Lanes | 1 |
+
+## Teams
+
+| Team | Surface | Stories |
+|---|---|---|
+| api | server | T.03, T.01, T.04 |
+| web | client | T.00 T.02,T.05 |
+
+| Other | Table |
+|---|---|
+| zz | T.99 |
+EOF
+"$LS" init-log "$TLOG"
+eq "teams lists both teams and stops at the table end" "2" "$("$LS" teams "$AD" | grep -c .)"
+eq "teams joins ids in table order" "$(printf 'api\tT.03,T.01,T.04')" \
+   "$("$LS" teams "$AD" | head -1)"
+eq "teams accepts spaces and commas as separators" "$(printf 'web\tT.00,T.02,T.05')" \
+   "$("$LS" teams "$AD" | sed -n 2p)"
+eq "an adapter without Teams lists none" "" "$("$LS" teams "$WORK/loop-log.md")"
+exits "teams without an adapter fails" 2 "$LS" teams "$WORK/missing.md"
+eq "unfiltered eligible keeps queue order" "T.01" "$("$LS" eligible "$Q" "$TLOG" | cut -f1)"
+eq "team order beats queue order" "T.03" \
+   "$("$LS" eligible "$Q" "$TLOG" --team api "$AD" | cut -f1)"
+eq "team output keeps the index shape" "4" \
+   "$("$LS" eligible "$Q" "$TLOG" --team api "$AD" | awk -F'\t' '{print NF}')"
+eq "a listed story outside the queue is skipped" "T.02" \
+   "$("$LS" eligible "$Q" "$TLOG" --team web "$AD" | cut -f1)"
+exits "unknown team fails" 2 "$LS" eligible "$Q" "$TLOG" --team ops "$AD"
+exits "--team without an adapter fails" 2 "$LS" eligible "$Q" "$TLOG" --team api
+"$LS" append "$TLOG" T.03 landed 201 feat/t-03 "$BASE" 1/1 green "MERGE(0)" -
+"$LS" append "$TLOG" T.02 landed 202 feat/t-02 "$BASE" 1/1 green "MERGE(0)" -
+eq "a logged head advances its team only" "T.01" \
+   "$("$LS" eligible "$Q" "$TLOG" --team api "$AD" | cut -f1)"
+eq "a cross-team dependency still waits" "" \
+   "$("$LS" eligible "$Q" "$TLOG" --team web "$AD")"
+"$LS" append "$TLOG" T.01 landed 203 feat/t-01 "$BASE" 1/1 green "MERGE(0)" -
+eq "a team dependency unlocks its dependent" "T.04" \
+   "$("$LS" eligible "$Q" "$TLOG" --team api "$AD" | cut -f1)"
+"$LS" append "$TLOG" T.04 landed 204 feat/t-04 "$BASE" 1/1 green "MERGE(0)" -
+eq "the other team's dependency lands and unlocks it" "T.05" \
+   "$("$LS" eligible "$Q" "$TLOG" --team web "$AD" | cut -f1)"
+eq "a drained team prints nothing" "" "$("$LS" eligible "$Q" "$TLOG" --team api "$AD")"
+
 echo
 if [ "$FAIL" -eq 0 ]; then
   printf 'PASS %s/%s\n' "$PASS" "$((PASS+FAIL))"

@@ -57,9 +57,12 @@ host, so resolve it rather than assume it.
    [adapter.md](adapter.md). If the adapter exists but its untracked log is missing,
    stop for operator reconciliation before selecting work; a fresh checkout must
    not recreate state while prior branches or pull requests may still be active.
+   If it declares `Teams`, run steps 2-7 once per team, concurrently, one story in
+   flight per team: [orchestrator.md](orchestrator.md#teams-and-lanes).
 
 2. **Select.** `"$LS" eligible <queue-root> <log>` prints
-   `id<TAB>deps<TAB>effort<TAB>path`, or nothing. Empty does not mean drained, so
+   `id<TAB>deps<TAB>effort<TAB>path`, or nothing; with teams add
+   `--team <name> <adapter>`. Empty does not mean drained, so
    run `"$LS" stalled <queue-root> <log>` and log what it names before concluding
    otherwise: [orchestrator.md](orchestrator.md).
 
@@ -93,8 +96,8 @@ host, so resolve it rather than assume it.
 
 ## Stop conditions
 
-- Queue empty, and nothing reported by `stalled`
-- 2 consecutive stories return `blocked`
+- Queue empty, and nothing reported by `stalled`, and no team has a story in flight
+- 2 consecutive stories return `blocked`; with teams this stops that team only
 - A verifier still returns HOLD after remediation round 2
 - A verifier returns `HOLD_REASON: EVIDENCE` or `MERGE AFTER FIXES`
 - **A verifier returns an escalation score at or above the adapter's threshold.**
@@ -103,8 +106,15 @@ host, so resolve it rather than assume it.
 - The authorization boundary above is hit
 - User interrupt
 
+With teams, a team with nothing eligible idles; it does not stop the loop. The other
+stops halt new dispatch in every team and let in-flight work finish its phase.
+
 Every stop writes a final log row naming which condition fired. If a story
 completed in the same iteration, that is two rows: the story's, then the stop.
+
+A stop that needs the operator tells them with an operator brief per item: id,
+title, one line on what it is, a link to where the file lives now, and the ask.
+Format: [orchestrator.md](orchestrator.md#operator-brief).
 
 ## Checklist
 
@@ -115,5 +125,9 @@ completed in the same iteration, that is two rows: the story's, then the stop.
 - [ ] BLOCKING route taken from the escalation score alone, never from the summary
 - [ ] Evidence holds and MERGE AFTER FIXES stopped outside score routing
 - [ ] Story bodies opened: zero. Verdict files opened: zero. Diffs read: zero
+- [ ] With teams: one story in flight per team, every idle team dispatched on each wake
+- [ ] With lanes < teams: phase 1 touched no shared runtime; lanes granted oldest first
+- [ ] Lock released only after merge or final routing and `STACK: down` or `none`
+- [ ] No log row for a `phase1` return; merges serialized; behind branches merged, never rebased
 - [ ] Clean verdict closed out on the branch: story filed, verdict archived,
       nothing left in `tasks/reviews/` for the next iteration

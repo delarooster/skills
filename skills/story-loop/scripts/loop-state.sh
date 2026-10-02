@@ -22,7 +22,10 @@ Usage: loop-state.sh <command> [args]
   logged <log> <id>                       Exit 0 if the story has a row
   outcome <log> <id>                      Print a story's outcome, or nothing
   head <log> <base>                       Print the chain head branch
-  eligible <queue-root> <log>             Print the next eligible story, or nothing
+  eligible <queue-root> <log> [--team <name> <adapter>]
+                                          Print the next eligible story, or nothing;
+                                          --team limits it to that team, in table order
+  teams <adapter>                         List the adapter's teams: team<TAB>id,id,...
   stalled <queue-root> <log>              List stories whose dependencies can never be met
   parent <log> <base> <mode> <deps>       Print the parent branch for a story
   check-base <expected> <actual>          Exit 0 if they match, 1 and a message if not
@@ -208,20 +211,63 @@ _deps_satisfied() {
 }
 
 cmd_eligible() {
-  local root="$1" log="$2" line id deps
+  local root="$1" log="$2" idx logged ids="" id line deps
+  if [ "${3:-}" = "--team" ]; then
+    if [ -z "${4:-}" ] || [ -z "${5:-}" ]; then
+      echo "eligible: --team needs <name> <adapter>" >&2
+      return 2
+    fi
+    ids=$(cmd_teams "$5" | awk -F'\t' -v t="$4" '$1 == t && !seen++ { print $2 }')
+    if [ -z "$ids" ]; then
+      echo "eligible: no team '$4' in $5" >&2
+      return 2
+    fi
+  fi
+  idx=$(cmd_index "$root")
+  logged=$(_rows "$log" | cut -f1)
+  # The team's table order replaces queue order, so a team works its own sequence.
+  if [ -n "$ids" ]; then
+    idx=$(for id in $(printf '%s' "$ids" | tr ',' ' '); do
+      printf '%s\n' "$idx" | awk -F'\t' -v i="$id" '$1 == i'
+    done)
+  fi
   while IFS= read -r line; do
     [ -n "$line" ] || continue
     id=$(_field "$line" 1)
     deps=$(_field "$line" 2)
-    if _has_line "$id" "$(_rows "$log" | cut -f1)"; then continue; fi
+    if _has_line "$id" "$logged"; then continue; fi
     if _deps_satisfied "$root" "$log" "$deps"; then
       printf '%s\n' "$line"
       return 0
     fi
   done <<EOF
-$(cmd_index "$root")
+$idx
 EOF
   return 0
+}
+
+# The first table whose header starts with "Team": Team | Surface | Stories.
+# Ids may be separated by commas, spaces or both; output joins them with commas.
+cmd_teams() {
+  local adapter="${1:-}"
+  if [ ! -f "$adapter" ]; then
+    echo "teams: no adapter at $adapter" >&2
+    return 2
+  fi
+  awk -F'|' '
+    /^[[:space:]]*\|/ {
+      n = split($0, f, "|")
+      c1 = f[2]; gsub(/^[ \t]+|[ \t]+$/, "", c1)
+      if (!intable) { if (c1 == "Team") intable = 1; next }
+      if (c1 ~ /^:?-+:?$/ || c1 == "" || n < 5) next
+      raw = f[4]; gsub(/,/, " ", raw)
+      m = split(raw, a, /[ \t]+/); ids = ""
+      for (i = 1; i <= m; i++) if (a[i] != "") ids = ids (ids == "" ? "" : ",") a[i]
+      print c1 "\t" ids
+      next
+    }
+    intable { exit }
+  ' "$adapter"
 }
 
 # A dependency is "pending" if it is still sitting in the queue and could land
@@ -322,6 +368,7 @@ case "${1:-help}" in
   depth)      shift; cmd_depth "$@" ;;
   eligible)   shift; cmd_eligible "$@" ;;
   stalled)    shift; cmd_stalled "$@" ;;
+  teams)      shift; cmd_teams "$@" ;;
   parent)     shift; cmd_parent "$@" ;;
   check-base) shift; cmd_check_base "$@" ;;
   append)     shift; cmd_append "$@" ;;
