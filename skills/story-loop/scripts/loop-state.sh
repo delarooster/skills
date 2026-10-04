@@ -22,7 +22,10 @@ Usage: loop-state.sh <command> [args]
   logged <log> <id>                       Exit 0 if the story has a row
   outcome <log> <id>                      Print a story's outcome, or nothing
   head <log> <base>                       Print the chain head branch
-  eligible <queue-root> <log>             Print the next eligible story, or nothing
+  eligible <queue-root> <log> [--team <name> <adapter>]
+                                          Print the next eligible story, or nothing;
+                                          --team limits it to that team, in table order
+  teams <adapter>                         List the adapter's teams: team<TAB>id,id,...
   stalled <queue-root> <log>              List stories whose dependencies can never be met
   parent <log> <base> <mode> <deps>       Print the parent branch for a story
   check-base <expected> <actual>          Exit 0 if they match, 1 and a message if not
@@ -77,13 +80,33 @@ EOF
 
 # Story id: the leading token of the first "# " heading, else the filename stem.
 # One definition, because index and completed must agree on what an id is or a
-# dependency silently stops matching itself.
-_story_id() {
-  local f="$1" id
-  id=$(sed -n 's/^# \([^:]*\):.*/\1/p' "$f" | head -1)
-  id=$(_trim "${id:-}")
-  [ -n "$id" ] || id=$(basename "$f" .md)
-  printf '%s' "$id"
+# dependency silently stops matching itself. _story_meta reads every file given in
+# one awk and prints id, dependencies, effort and path tab-separated, in argument
+# order, with the defaults the queue has always used. A fork per file is what made
+# this slow.
+_story_meta() {
+  [ -e "${1:-}" ] || return 0
+  awk '
+    function trim(v) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); return v }
+    function emit(f,   fb) {
+      fb = f; sub(/^.*\//, "", fb); sub(/\.md$/, "", fb)
+      printf "%s\t%s\t%s\t%s\n", (id == "" ? fb : id), (dep == "" ? "None" : dep), (eff == "" ? "?" : eff), f
+    }
+    function reset() { id = dep = eff = ""; gid = gdep = geff = 0 }
+    FNR == 1 {
+      if (cur != "") emit(cur)
+      for (; nxt < ARGC && ARGV[nxt] != FILENAME; nxt++) { reset(); emit(ARGV[nxt]) }
+      nxt++; cur = FILENAME; reset()
+    }
+    !gid && /^# [^:]*:/ { t = $0; sub(/^# /, "", t); sub(/:.*/, "", t); id = trim(t); gid = 1 }
+    !gdep && /^\*\*Dependencies:\*\*/ { t = $0; sub(/^\*\*Dependencies:\*\*/, "", t); dep = trim(t); gdep = 1 }
+    !geff && /^\*\*Effort:\*\*/ { t = $0; sub(/^\*\*Effort:\*\*/, "", t); eff = trim(t); geff = 1 }
+    BEGIN { nxt = 1 }
+    END {
+      if (cur != "") emit(cur)
+      for (; nxt < ARGC; nxt++) { reset(); emit(ARGV[nxt]) }
+    }
+  ' "$@"
 }
 
 # A row counts toward the chain only if the work actually reached a branch.
@@ -108,20 +131,10 @@ cmd_init_log() {
 
 # Story headers only. Never the body. That is the point.
 cmd_index() {
-  local root="$1" dir f id deps effort
+  local root="$1" dir
   for dir in "$root/2_ready" "$root/1_backlog"; do
     [ -d "$dir" ] || continue
-    for f in "$dir"/*.md; do
-      [ -e "$f" ] || continue
-      id=$(_story_id "$f")
-      deps=$(sed -n 's/^\*\*Dependencies:\*\*[[:space:]]*//p' "$f" | head -1)
-      deps=$(_trim "${deps:-None}")
-      [ -z "$deps" ] && deps="None"
-      effort=$(sed -n 's/^\*\*Effort:\*\*[[:space:]]*//p' "$f" | head -1)
-      effort=$(_trim "${effort:-?}")
-      [ -z "$effort" ] && effort="?"
-      printf '%s\t%s\t%s\t%s\n' "$id" "$deps" "$effort" "$f"
-    done
+    _story_meta "$dir"/*.md
   done
 }
 
@@ -131,12 +144,9 @@ cmd_index() {
 # Without reading this folder, a completed dependency is indistinguishable from a
 # deleted one, and every story that depends on it stalls forever.
 cmd_completed() {
-  local root="$1" f
+  local root="$1"
   [ -d "$root/6_completed" ] || return 0
-  for f in "$root/6_completed"/*.md; do
-    [ -e "$f" ] || continue
-    printf '%s\n' "$(_story_id "$f")"
-  done
+  _story_meta "$root/6_completed"/*.md | cut -f1
 }
 
 cmd_logged() {
@@ -184,80 +194,111 @@ EOF
   printf '%s\n' "$n"
 }
 
-# A dependency is done if this loop landed it, or if it sits in 6_completed. Those
-# are the two ledgers and they are checked in that order. A row logged blocked
-# makes the dependent ineligible; it never silently roots at base. Sitting in
-# 6_completed outranks that, because moving a file there is a deliberate claim
-# that the work merged, and merged work is already in the base branch.
-_dep_done() {
-  local root="$1" log="$2" d="$3" oc
-  oc=$(cmd_outcome "$log" "$d")
-  case "$oc" in landed|partial) return 0 ;; esac
-  _has_line "$d" "$(cmd_completed "$root")"
-}
-
-_deps_satisfied() {
-  local root="$1" log="$2" deps="$3" d
-  case "$deps" in None|none|NONE|"-"|"") return 0 ;; esac
-  for d in $(printf '%s' "$deps" | tr ',' ' '); do
-    d=$(_trim "$d")
-    [ -n "$d" ] || continue
-    _dep_done "$root" "$log" "$d" || return 1
-  done
-  return 0
+# Resolve dependencies for every story in one pass, reading each ledger once: the
+# completed folder, the log rows and the queue index. A dependency is done if the
+# log shows it landed or partial, or it sits in 6_completed (a deliberate claim
+# that it merged). <mode> eligible prints the first story in the order given that
+# is unlogged with every dependency done; stalled prints each unlogged story with
+# the dependencies that can never be met: not done, and either logged otherwise
+# or no longer queued.
+_resolve() {
+  local mode="$1" root="$2" log="$3" full="$4" idx="$5"
+  {
+    cmd_completed "$root" | awk '{ print "C\t" $0 }'
+    _rows "$log" | awk '{ print "L\t" $0 }'
+    printf '%s\n' "$full" | awk -F'\t' 'NF { print "Q\t" $1 }'
+    printf '%s\n' "$idx" | awk 'NF { print "I\t" $0 }'
+  } | awk -F'\t' -v mode="$mode" '
+    function trim(v) { gsub(/^[[:space:]]+|[[:space:]]+$/, "", v); return v }
+    function done_(d) { return (out[d] == "landed" || out[d] == "partial" || (d in comp)) }
+    function nodeps(x) { return (x == "None" || x == "none" || x == "NONE" || x == "-" || x == "") }
+    $1 == "C" { comp[$2] = 1; next }
+    $1 == "L" {
+      logged[$2] = 1
+      if (!($2 in out)) out[$2] = (NF >= 3 ? $3 : $2)
+      next
+    }
+    $1 == "Q" { queued[$2] = 1; next }
+    $1 == "I" { n++; line[n] = substr($0, 3); id[n] = $2; deps[n] = $3 }
+    END {
+      for (k = 1; k <= n; k++) {
+        if (nodeps(deps[k])) {
+          if (mode == "eligible" && !(id[k] in logged)) { print line[k]; exit }
+          continue
+        }
+        if (id[k] in logged) continue
+        raw = deps[k]; gsub(/,/, " ", raw)
+        m = split(raw, a, /[[:space:]]+/); miss = ""; ok = 1
+        for (i = 1; i <= m; i++) {
+          d = trim(a[i]); if (d == "") continue
+          if (done_(d)) continue
+          ok = 0
+          if (out[d] != "" || !(d in queued)) miss = miss (miss == "" ? "" : ",") d
+        }
+        if (mode == "eligible") { if (ok) { print line[k]; exit } }
+        else if (miss != "") print id[k] "\t" miss
+      }
+    }
+  '
 }
 
 cmd_eligible() {
-  local root="$1" log="$2" line id deps
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    id=$(_field "$line" 1)
-    deps=$(_field "$line" 2)
-    if _has_line "$id" "$(_rows "$log" | cut -f1)"; then continue; fi
-    if _deps_satisfied "$root" "$log" "$deps"; then
-      printf '%s\n' "$line"
-      return 0
+  local root="$1" log="$2" idx full ids="" id
+  if [ "${3:-}" = "--team" ]; then
+    if [ -z "${4:-}" ] || [ -z "${5:-}" ]; then
+      echo "eligible: --team needs <name> <adapter>" >&2
+      return 2
     fi
-  done <<EOF
-$(cmd_index "$root")
-EOF
+    ids=$(cmd_teams "$5" | awk -F'\t' -v t="$4" '$1 == t && !seen++ { print $2 }')
+    if [ -z "$ids" ]; then
+      echo "eligible: no team '$4' in $5" >&2
+      return 2
+    fi
+  fi
+  idx=$(cmd_index "$root")
+  full="$idx"
+  # The team's table order replaces queue order, so a team works its own sequence.
+  if [ -n "$ids" ]; then
+    idx=$(for id in $(printf '%s' "$ids" | tr ',' ' '); do
+      printf '%s\n' "$idx" | awk -F'\t' -v i="$id" '$1 == i'
+    done)
+  fi
+  _resolve eligible "$root" "$log" "$full" "$idx"
   return 0
 }
 
-# A dependency is "pending" if it is still sitting in the queue and could land
-# later. Anything else unsatisfied is permanent: it was attempted and blocked, or
-# it does not exist at all. Permanent cases must be logged, not silently skipped,
-# or the queue drains while stories vanish.
-_dep_is_pending() {
-  local root="$1" log="$2" d="$3" oc
-  _dep_done "$root" "$log" "$d" && return 1      # already done: not pending
-  oc=$(cmd_outcome "$log" "$d")
-  [ -n "$oc" ] && return 1                       # logged and not landed: permanent
-  _has_line "$d" "$(cmd_index "$root" | cut -f1)"  # still queued: pending
+# The first table whose header starts with "Team": Team | Surface | Stories.
+# Ids may be separated by commas, spaces or both; output joins them with commas.
+cmd_teams() {
+  local adapter="${1:-}"
+  if [ ! -f "$adapter" ]; then
+    echo "teams: no adapter at $adapter" >&2
+    return 2
+  fi
+  awk -F'|' '
+    /^[[:space:]]*\|/ {
+      n = split($0, f, "|")
+      c1 = f[2]; gsub(/^[ \t]+|[ \t]+$/, "", c1)
+      if (!intable) { if (c1 == "Team") intable = 1; next }
+      if (c1 ~ /^:?-+:?$/ || c1 == "" || n < 5) next
+      raw = f[4]; gsub(/,/, " ", raw)
+      m = split(raw, a, /[ \t]+/); ids = ""
+      for (i = 1; i <= m; i++) if (a[i] != "") ids = ids (ids == "" ? "" : ",") a[i]
+      print c1 "\t" ids
+      next
+    }
+    intable { exit }
+  ' "$adapter"
 }
 
+# A dependency is done if this loop landed it or it sits in 6_completed. Pending
+# means still queued and unlogged; any other unmet dependency is permanent and is
+# reported here rather than skipped, or the queue drains while stories vanish.
 cmd_stalled() {
-  local root="$1" log="$2" line id deps d missing
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    id=$(_field "$line" 1)
-    deps=$(_field "$line" 2)
-    case "$deps" in None|none|NONE|"-"|"") continue ;; esac
-    if _has_line "$id" "$(_rows "$log" | cut -f1)"; then continue; fi
-    _deps_satisfied "$root" "$log" "$deps" && continue
-    missing=""
-    for d in $(printf '%s' "$deps" | tr ',' ' '); do
-      d=$(_trim "$d")
-      [ -n "$d" ] || continue
-      _dep_done "$root" "$log" "$d" && continue
-      if ! _dep_is_pending "$root" "$log" "$d"; then
-        missing="${missing:+$missing,}$d"
-      fi
-    done
-    [ -n "$missing" ] && printf '%s\t%s\n' "$id" "$missing"
-  done <<EOF
-$(cmd_index "$root")
-EOF
+  local root="$1" log="$2"
+  local idx
+  idx=$(cmd_index "$root")
+  _resolve stalled "$root" "$log" "$idx" "$idx"
   return 0
 }
 
@@ -322,6 +363,7 @@ case "${1:-help}" in
   depth)      shift; cmd_depth "$@" ;;
   eligible)   shift; cmd_eligible "$@" ;;
   stalled)    shift; cmd_stalled "$@" ;;
+  teams)      shift; cmd_teams "$@" ;;
   parent)     shift; cmd_parent "$@" ;;
   check-base) shift; cmd_check_base "$@" ;;
   append)     shift; cmd_append "$@" ;;

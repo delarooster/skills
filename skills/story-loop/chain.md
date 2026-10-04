@@ -54,6 +54,13 @@ also why a row is appended even when a story is blocked: the log is the chain.
 | `Dependencies: None` | `dag` | The declared base branch |
 | A dependency not landed | any | Not eligible. Never silently root at base |
 
+**A merged parent is the base.** When the computed parent's pull request has merged
+into the base branch, supply the base branch as `PARENT`: its work is already
+there, and the branch is usually deleted on merge. Confirm the merge with the forge
+(`gh pr list --state merged --head <parent>`), not from a missing ref alone, and
+say "parent merged, rooted at <base>" in the log row. An unmerged parent that has
+vanished is still a stop.
+
 `linear` is the default. `dag` is honest about what actually depends on what, but
 it is only safe when `Dependencies` headers are trustworthy across the whole
 queue: two base-rooted stories touching the same files conflict, and nothing
@@ -100,7 +107,9 @@ iteration rather than trusted.
 In sequential mode the parent is final before the child branches, because the next
 story is not selected until the previous one has logged. Parallel fan-out breaks
 that property and would need a restack pass whenever a parent changes after a
-child has branched. That is the strongest argument for staying sequential.
+child has branched. That is the strongest argument for staying sequential. Teams
+avoid the restack by not stacking across teams at all: each story without a dependency roots at the
+base and the base is merged forward. See [orchestrator.md](orchestrator.md#teams-and-lanes).
 
 ## Depth
 
