@@ -144,7 +144,7 @@ Two fields are checked, not trusted: `BASE` against the parent you supplied (see
 ## Verifier subagent
 
 Optional. If the adapter names one, dispatch it by pull request number with
-today's date, in a fresh context every round including remediation rounds. It
+today's date (with `forge: none`, by branch and parent: it judges `parent...branch`), in a fresh context every round including remediation rounds. It
 never becomes the implementer's assistant. If the adapter names none, skip the
 stage silently and log `VERDICT: absent`. Do not offer to create one.
 
@@ -184,6 +184,12 @@ remediation or the next story. `MERGE AFTER FIXES` is also outside score routing
 move the story to `5_blocked`, log `blocked :: non-blocking fixes`, surface an
 operator brief, and stop because the loop is not authorized to remediate SHOULD FIX
 findings.
+
+The operator may answer that stop by authorizing remediation of those findings for
+that one story. Relay the summary to the warm implementer, count the round against
+the cap of 2, and verify again in a fresh context. The authorization does not carry to
+the next story, and a finding that is only a missing process record (no red-first
+commit, say) can be accepted as is rather than remediated.
 
 Require `EVIDENCE` with a HOLD verdict, zero blocking count, zero score, and
 `BLOCKERS: none`; `BLOCKING` with a HOLD verdict, positive count, positive score,

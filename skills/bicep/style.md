@@ -67,6 +67,10 @@ resource vnet 'Microsoft.Network/virtualNetworks@2023-09-01' existing = {
 - Expose `id` and `name` for every primary resource created by a module
 - Do not expose secrets or connection strings in outputs
 
+## Booleans in String Contexts
+
+ARM renders `string(true)` as `True`, capitalised. Anything that reads the value with an exact, case-sensitive compare (an app setting checked with `=== 'true'`, a shell `[ "$x" = true ]`) sees it as off, while a case-insensitive reader on the other side of the same flag sees it as on. When a bool parameter feeds an environment variable or app setting, write `toLower(string(flag))`, and make the reader case-insensitive too.
+
 ## `dependsOn` Usage
 
 Only add explicit `dependsOn` when Bicep cannot infer the dependency from symbolic name references in `params`. If a module already references `virtualNetwork.outputs.virtualNetworkId`, the dependency is implicit -- no `dependsOn` needed.
