@@ -19,9 +19,10 @@ See [tests.md](tests.md) for examples and [mocking.md](mocking.md) for mocking g
 
 A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals.
 
-**Test only at pre-agreed seams.** Before writing any test, write down the seams under test and confirm them with the user. No test is written at an unconfirmed seam. You can't test everything, so agreeing the seams up front is how testing effort lands on the critical paths and complex logic instead of every edge case.
+**Test only at agreed seams.** Before writing any test, write down the seams under test. You can't test everything, so agreeing the seams up front is how testing effort lands on the critical paths and complex logic instead of every edge case.
 
-Ask: "What's the public interface, and which seams should we test?"
+- **Interactive:** confirm them with the user before the first test. Ask: "What's the public interface, and which seams should we test?"
+- **Unattended** (a loop or dispatched agent with no user to ask): take the seams from the story's acceptance criteria, and state them in the pull request body so a reviewer can disagree.
 
 When the shape of that interface is itself in question (how deep the module is, where the seam belongs, what the interface should expose), call the Skill tool with "codebase-design" for the vocabulary. It is the shared source of the module, interface, depth, seam, adapter, leverage and locality terms, and it is a reference to consult, not a session to run.
 
@@ -51,4 +52,5 @@ Prove each behavior at the cheapest layer that can actually observe it: unit, th
 
 - **Red before green.** Write the failing test first, then only enough code to pass it. Don't anticipate future tests or add speculative features.
 - **One slice at a time.** One seam, one test, one minimal implementation per cycle.
-- **Refactor after green.** Keep refactoring in the review stage, outside the red → green implementation cycle.
+- **Run the narrowest test that can fail.** One file or one filter for the slice, not the suite. Where and how much more to run is the repo's call (its `AGENTS.md`, its CI); follow it.
+- **Refactor after green, never while red.** Keep the refactor in its own step, with the tests green before and after.
