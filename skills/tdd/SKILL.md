@@ -25,6 +25,22 @@ Ask: "What's the public interface, and which seams should we test?"
 
 When the shape of that interface is itself in question (how deep the module is, where the seam belongs, what the interface should expose), call the Skill tool with "codebase-design" for the vocabulary. It is the shared source of the module, interface, depth, seam, adapter, leverage and locality terms, and it is a reference to consult, not a session to run.
 
+## Which layer
+
+Prove each behavior at the cheapest layer that can actually observe it: unit, then integration, then end-to-end. Cost is a reason to move a test down only when the lower test proves the same thing.
+
+- **Moving a test down needs a named replacement.** Before deleting or demoting an end-to-end test, cite the lower-layer test that fails when the behavior breaks. A plausible-sounding lead is not that test: verify it by breaking the behavior and watching that named test go red. Leads are often wrong.
+- **Keep the end-to-end test when it is the only proof.** These behaviors only exist in a real browser or a running system:
+  - touch, pointer and drag hit-testing;
+  - focus order;
+  - hydration timing;
+  - layout (computed sizes, overflow, overlap);
+  - canvas and map rendering;
+  - flows that cross services.
+
+  Keep them even when it grows the suite: a gate that is smaller because it lost its only proof of a behavior is a coverage regression, not a saving.
+- **Write a new end-to-end test only for a journey (a multi-page user flow crossing services) or one of those behaviors. Field validation and single-component states are not journeys.** Anything a lower layer can prove goes there.
+
 ## Anti-patterns
 
 - **Implementation-coupled**: mocks internal collaborators, tests private methods, or verifies through a side channel (querying the database instead of using the interface). The tell: the test breaks when you refactor but behavior hasn't changed.
