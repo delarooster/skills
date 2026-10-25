@@ -34,6 +34,7 @@ Clone to `~/repos/skills`: commands reference that path. `./setup.sh help` lists
 | `story-loop` | Drain a story queue: fresh subagent per story, stacked PRs, independent verifier |
 | `plan-project` | Break goals into epics and stories (the queue `story-loop` drains) |
 | `tdd` | Red-green-refactor with behavior-focused tests |
+| `grilling` | Stress-test a plan by interviewing you one question at a time |
 | `git-conventions` | Branch, commit, and PR conventions |
 | `cold-start` | Stateless sessions: read state, work, write state, exit |
 | `wrap` | Close a session by recording state, not narrative |

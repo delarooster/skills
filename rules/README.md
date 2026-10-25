@@ -12,6 +12,7 @@ Skills are authored in `skills/` (this repo is the source of truth) and deployed
 | `/bicep-modules` | Bumping versions, modifying modules published to ACR | Semver classification, version bump workflow, publishing conventions |
 | `/terraform` | Working with `.tf` files, modules, `tofu test` | Loads structure, style, and testing conventions |
 | `/tdd` | "test-first", "red-green-refactor", integration tests | Guides behavior-focused test-driven development |
+| `/grilling` | "grill me", stress-test a plan or decision | Interviews one question at a time, recommended answer first, until the decision tree is settled |
 | `/plan-project` | "create epics", "break down stories", "plan project work" | Creates epics/stories from initiative goals |
 | `/git-conventions` | Creating branches, writing commits, opening PRs | Loads branch naming, commit format, PR workflow |
 | `/story-loop` | "run the story loop", "work the backlog", "drain the story queue" | Drains a story queue one item per fresh subagent, stacking each PR on the last |
