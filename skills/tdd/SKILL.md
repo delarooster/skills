@@ -19,11 +19,28 @@ See [tests.md](tests.md) for examples and [mocking.md](mocking.md) for mocking g
 
 A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals.
 
-**Test only at pre-agreed seams.** Before writing any test, write down the seams under test and confirm them with the user. No test is written at an unconfirmed seam. You can't test everything, so agreeing the seams up front is how testing effort lands on the critical paths and complex logic instead of every edge case.
+**Test only at agreed seams.** Before writing any test, write down the seams under test. You can't test everything, so agreeing the seams up front is how testing effort lands on the critical paths and complex logic instead of every edge case.
 
-Ask: "What's the public interface, and which seams should we test?"
+- **Interactive:** confirm them with the user before the first test. Ask: "What's the public interface, and which seams should we test?"
+- **Unattended** (a loop or dispatched agent with no user to ask): take the seams from the story's acceptance criteria, and state them in the pull request body so a reviewer can disagree.
 
 When the shape of that interface is itself in question (how deep the module is, where the seam belongs, what the interface should expose), call the Skill tool with "codebase-design" for the vocabulary. It is the shared source of the module, interface, depth, seam, adapter, leverage and locality terms, and it is a reference to consult, not a session to run.
+
+## Which layer
+
+Prove each behavior at the cheapest layer that can actually observe it: unit, then integration, then end-to-end. Cost is a reason to move a test down only when the lower test proves the same thing.
+
+- **Moving a test down needs a named replacement.** Before deleting or demoting an end-to-end test, cite the lower-layer test that fails when the behavior breaks. A plausible-sounding lead is not that test: verify it by breaking the behavior and watching that named test go red. Leads are often wrong.
+- **Keep the end-to-end test when it is the only proof.** These behaviors only exist in a real browser or a running system:
+  - touch, pointer and drag hit-testing;
+  - focus order;
+  - hydration timing;
+  - layout (computed sizes, overflow, overlap);
+  - canvas and map rendering;
+  - flows that cross services.
+
+  Keep them even when it grows the suite: a gate that is smaller because it lost its only proof of a behavior is a coverage regression, not a saving.
+- **Write a new end-to-end test only for a journey (a multi-page user flow crossing services) or one of those behaviors. Field validation and single-component states are not journeys.** Anything a lower layer can prove goes there.
 
 ## Anti-patterns
 
@@ -35,4 +52,5 @@ When the shape of that interface is itself in question (how deep the module is, 
 
 - **Red before green.** Write the failing test first, then only enough code to pass it. Don't anticipate future tests or add speculative features.
 - **One slice at a time.** One seam, one test, one minimal implementation per cycle.
-- **Refactor after green.** Keep refactoring in the review stage, outside the red → green implementation cycle.
+- **Run the narrowest test that can fail.** One file or one filter for the slice, not the suite. Where and how much more to run is the repo's call (its `AGENTS.md`, its CI); follow it.
+- **Refactor after green, never while red.** Keep the refactor in its own step, with the tests green before and after.
