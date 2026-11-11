@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-27",
+  "model": "gpt-6.1-sol",
+  "baseline": {
+    "markdown_files": 12,
+    "total_lines": 1553,
+    "entry_lines": 167,
+    "files_over_100_lines": [
+      "SKILL.md",
+      "adapter.md",
+      "chain.md",
+      "implementer-brief.md",
+      "orchestrator.md",
+      "runner-codex.md",
+      "verify.md"
+    ]
+  },
+  "composite": 0.95,
+  "scores": {
+    "density": 1,
+    "contradictions": 0,
+    "redundancy": 0,
+    "specificity": 2,
+    "coverage": 2,
+    "efficiency": 1
+  },
+  "report": "baseline.md"
+}
