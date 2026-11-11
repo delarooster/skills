@@ -3,9 +3,15 @@
 ## Prohibitions
 
 **MUST NOT** read source files, diffs, verdict bodies, test output or CI logs.
-**MUST NOT** implement or edit story contents. It may perform only the fixed story
-file moves below, tasks-only commits and pushes that persist those moves on the
-story branch, and, with teams, writes to the stack lock file.
+**MUST NOT** implement or edit story contents, or write `tasks/` in the main
+checkout. It may perform only the fixed story file moves below, on the story
+branch; the closeout commit when the adapter's `Closeout by` is `orchestrator`; the
+merge the adapter's merge policy allows; native stack linking (`gh stack link`);
+creating the story branch and worktree where the runner says the orchestrator does
+(Codex, OpenCode); a
+missing adapter written on its own branch with a tasks-only pull request (with
+`Forge: none`, push that branch and stop for the operator); and, with teams, writes
+to the stack lock file.
 
 The point is not tidiness. The orchestrator that never reads a diff cannot talk
 itself into believing a story landed. It sees only what the subagent claims and
@@ -13,15 +19,19 @@ what the verifier independently found, and it verifies the one claim it can.
 
 ## Per iteration
 
-1. Read the log and the story index. `"$LS" index <queue-root>` emits
+1. Resolve `Queue root`, `Log path` and `Verdict dir` with `"$LS" adapter-path`
+   (never `adapter`, whose relative values would resolve against the cwd). Read the
+   log and the story index. `"$LS" index <queue-root>` emits
    `id<TAB>deps<TAB>effort<TAB>path` and nothing else. Never open a story body.
 2. Select the next eligible story.
 3. Compute its parent branch. See [chain.md](chain.md).
-4. Spawn the implementer, spawn the verifier, relay bounded findings between them.
-5. Check the returned `BASE` against the parent supplied.
-6. Move the story file between state folders per the plan-project state machine.
-7. Append exactly one row to the log.
-8. Decide whether to continue.
+4. Spawn the implementer.
+5. Check the returned `BASE` against the parent supplied, before any verifier runs.
+6. Spawn the verifier and relay bounded findings to the implementer.
+7. Move the story file per the state machine; on a clean verdict, as the closeout commit.
+8. Under `Merge policy: clean-verdict`, merge after closeout if the gate passes.
+9. Append exactly one row to the log, its Notes starting `merged` when step 8 merged.
+10. Decide whether to continue.
 
 If an adapter already exists but its configured untracked log does not, stop for
 state reconciliation before selecting a story. A fresh checkout cannot infer which
@@ -57,14 +67,15 @@ folder is fixed:
 | `landed`, verifier not yet run | `4_in-review` | The pull request is open and unjudged. Work is done; review is not |
 | `landed`, clean verdict | `6_completed` | In the closeout commit, on the branch. See below |
 | `partial` | `4_in-review` | Same state, with the shortfall recorded in the log row |
-| `blocked` | `5_blocked` | Including underspecified, unstacked, bad return, unsatisfiable dependency, evidence HOLD, MERGE AFTER FIXES, human escalation, and exhausted remediation |
+| `blocked` | `5_blocked` | Including underspecified, unstacked, bad return, unsatisfiable dependency, evidence HOLD, MERGE AFTER FIXES with no review list, and exhausted remediation |
+| `escalated` | `5_blocked` | A score at or above the escalation threshold; a human decides |
 
 `6_completed` means merged, or on a branch whose only remaining step is the
-merge. The loop never merges, but it does not leave the filing to "whoever merges
-the chain" either -- that is how stories end up shipped and still sitting in
-`1_backlog`. When the verifier returns a clean verdict, the closeout commit in
-`commands/git.md` moves the story from `4_in-review` to `6_completed` **on the
-branch**, so the ledger lands at the same instant the merge does and dies with the
+merge. Whether or not the loop merges, it does not leave the filing to "whoever
+merges the chain" -- that is how stories end up shipped and still sitting in
+`1_backlog`. When the verifier returns a clean verdict, the
+[closeout commit](#closeout) moves the story to `6_completed` from whatever folder it
+is in on the branch, **on the branch**, so the ledger lands at the same instant the merge does and dies with the
 branch if the pull request is abandoned. **The folder is load-bearing either
 way.**
 The log is untracked and starts empty on a fresh checkout, so `6_completed` is the
@@ -75,19 +86,35 @@ reads it to satisfy dependencies. Move merged stories there and nowhere else.
 `tasks/archive/` or any path outside `<queue-root>` deletes them from the
 dependency ledger, and every story that depends on one is then reported
 `dependency unsatisfiable` forever. The queue root is the ledger; archiving is
-for session records, not for stories. `3_in-progress` is optional: use
-it while an implementer is in flight if you want a crash to be visible, but move
-the file out before appending the log row, so a resumed run sees a consistent tree.
+for session records, not for stories. `3_in-progress` is optional and only ever on
+the story branch: an implementer may move its own file there while it works, and
+it leaves before the log row is appended, so a resumed run sees a consistent tree.
 
 Move the file **after** the implementer returns, never before. A story moved on
 spawn and then abandoned by a crashed subagent is invisible to both the queue and
 the log.
 
-The orchestrator performs the move without opening the story body. When a story
-branch exists, persist the move there in a tasks-only commit and push; this state
-commit does not trigger another verification because it cannot change reviewed
-behavior. Before a branch exists, leave the move in the shared checkout and never
-commit or push it to the base branch.
+Every move is made on the story branch, never in the main checkout, without
+opening the story body. When a story branch exists, persist the move there in a
+tasks-only commit and push, made by whoever `Closeout by` names; this state commit
+does not trigger another verification because it cannot change reviewed behavior.
+When no branch exists (a story blocked before branching), do not move the file:
+the log row records the outcome, and the operator brief says where the file still
+is.
+
+## Closeout
+
+The last commit on a story branch after a clean verdict. It touches `tasks/` only:
+the story file into `6_completed`, the verdict file at the `PATH` the verifier
+returned copied into the adapter's `Verdict archive` (with `none`, that file is
+deleted instead and nothing is copied), and any per-story state file the
+repo's notes name. It is pushed to the story branch, never to the base, and an
+iteration that ends without it is not finished.
+
+| `Closeout by` | Who commits it |
+|---|---|
+| `orchestrator` (default) | The orchestrator, in the story's worktree. No other writes |
+| `implementer` | The warm implementer, on a message naming exactly those moves; cold, a fresh implementer briefed with only the closeout. Use it where the repo's git rules let only implementers commit |
 
 ## Nothing eligible is not nothing left
 
@@ -112,7 +139,8 @@ where it was until the merge, which is also correct: nothing there can see it ye
 
 **Two ledgers answer "is this dependency done?"**, in order: a `landed` or
 `partial` row in the log, then presence in `6_completed`. A dependency in neither
-is unsatisfiable. Before acting on a `stalled` report, check that the named
+is unsatisfiable. A trim ([Log](#log)) drops only `stop` rows, so neither ledger
+loses a story. Before acting on a `stalled` report, check that the named
 dependency is not simply a finished story filed somewhere other than
 `6_completed` -- that is a bookkeeping defect in the queue, not a blocked story,
 and logging it as blocked buries it.
@@ -125,8 +153,17 @@ the verifier. Brief it with the fixed template in
 brief from memory: the omitted-parent failure in [chain.md](chain.md) is what that
 produces.
 
-Its job ends at "pull request is open against the parent and CI has left
-pending." It does not merge, and it does not choose its own base.
+Its job ends at "pull request is open against the parent"; it does not wait on CI.
+It does not merge its pull request (freshening its own branch from the parent is
+allowed), and it does not choose its own base.
+
+**`CI: pending` is a valid return.** It means the implementer stopped waiting, not
+that anything failed. Before dispatching the verifier, wait on the forge's checks
+verb ([chain.md](chain.md)) until they leave pending or `CI wait` passes, and log
+the CI cell from what the checks say then, not from the return. Wait with one
+background command and act on its exit, never by polling turn after turn: every
+orchestrator turn re-sends the whole context. If the checks go red, message the
+warm implementer.
 
 ## Return contract
 
@@ -138,73 +175,25 @@ Validate on receipt. A non-conforming return is rejected and re-requested once,
 then logged `blocked :: bad return`. A subagent that returns a diff has defeated
 the whole design, so treat an oversized return as non-conforming too.
 
-Two fields are checked, not trusted: `BASE` against the parent you supplied (see
-[chain.md](chain.md)), and `AC` against the story's own checkbox count.
+One field is checked, not trusted: `BASE` against the parent you supplied (see
+[chain.md](chain.md)). `AC` is logged as returned; `merge-gate` reads it, so an
+unmet or malformed count holds the merge.
 
-## Verifier subagent
+## Verify, merge, remediate
 
-Optional. If the adapter names one, dispatch it by pull request number with
-today's date (with `forge: none`, by branch and parent: it judges `parent...branch`), in a fresh context every round including remediation rounds. It
-never becomes the implementer's assistant. If the adapter names none, skip the
-stage silently and log `VERDICT: absent`. Do not offer to create one.
+Read [verify.md](verify.md) at step 6, once the implementer has returned: the
+verifier dispatch, its return contract, escalation routing, the merge gate and
+remediation rounds.
 
-**Wait for CI before the first dispatch.** Poll the checks until they leave
-pending or roughly four minutes pass. A verifier dispatched at pull-request-open
-reports the one gate with real signal as unverifiable, which is worse than not
-running it. If checks never appear, dispatch anyway and record their absence; the
-absence is itself a finding.
+## Operator gates
 
-Read back only seven fields: verdict, hold reason, blocking count, **escalation
-score**, one-line blockers handoff, one-line summary, verdict path. Never open the
-verdict file.
-
-## Escalation
-
-The verifier is the sole score authority. It scores each blocking finding 1-10
-from direct evidence and returns the maximum as `ESCALATION`, or 0 when nothing
-blocks. The orchestrator never recomputes that score. Only a validated
-`HOLD_REASON: BLOCKING` enters the table. The adapter's **escalation threshold**
-(default **8**) splits that routing:
-
-| Score | Route | Action |
-|---|---|---|
-| **>= threshold** | HUMAN | Move the story to `5_blocked`, stop the loop, log `escalated :: <score>` with the PR and one-line summary, and surface it as an [operator brief](#operator-brief). Do not remediate or start the next story |
-| **1 <= score < threshold** | AUTO | Bounded remediation below, then continue |
-
-**Route on the number, never on the summary.** The summary is one line of prose you
-are allowed to relay; it is not evidence and must not change the route. If the
-verifier returns no `ESCALATION` field, treat it as a non-conforming return and
-re-request once, then log `blocked :: bad return`. Do not infer a score from the
-verdict, and do not substitute your own judgement of severity: you have not read
-the findings, which is precisely why you are trusted to route them.
-
-`HOLD_REASON: EVIDENCE` is not a score route. Move the story to `5_blocked`, log
-`blocked :: evidence unavailable`, surface an operator brief, and stop before
-remediation or the next story. `MERGE AFTER FIXES` is also outside score routing:
-move the story to `5_blocked`, log `blocked :: non-blocking fixes`, surface an
-operator brief, and stop because the loop is not authorized to remediate SHOULD FIX
-findings.
-
-The operator may answer that stop by authorizing remediation of those findings for
-that one story. Relay the summary to the warm implementer, count the round against
-the cap of 2, and verify again in a fresh context. The authorization does not carry to
-the next story, and a finding that is only a missing process record (no red-first
-commit, say) can be accepted as is rather than remediated.
-
-Require `EVIDENCE` with a HOLD verdict, zero blocking count, zero score, and
-`BLOCKERS: none`; `BLOCKING` with a HOLD verdict, positive count, positive score,
-and a BLOCKERS value other than empty or `none`; and `NONE` with zero count, zero
-score, and `BLOCKERS: none` on MERGE or MERGE AFTER FIXES. Require the returned
-verdict path to exist without opening it. Reject any other combination once for
-correction, then log `blocked :: bad return`.
-
-**The threshold spends a human's attention.** Every escalation is a claim that a
-person must look now. Every non-escalation is a claim that two automated rounds
-will do. Both are expensive when wrong, in opposite directions, so the scale is
-anchored in the verifier definition rather than left to taste.
-
-Escalation never authorizes a merge, and it never removes the human from the merge.
-It decides only who reads the verdict.
+When the operator asks to be pinged or told before a step (a first run, a deploy, a
+delete, a scale-down, anything they want to watch), stop on the host's question tool
+with one clear choice, recommended option first (for example "I'm online, start" /
+"Not yet"), and do no further work past the gate. Never leave a "let me know" status
+line and keep working: it scrolls away, and the operator finds the orchestrator
+waiting only after scrolling up. While waiting on background agents, do not emit
+repeated status chatter.
 
 ## Operator brief
 
@@ -225,69 +214,10 @@ advances: the branch stories stack onto, not a checkout that may be behind it.
 Story files move between state folders and worktrees, and a stale path costs the
 operator a search for every item. Writing the brief opens no story body.
 
-## Remediation rounds
-
-Relay the verifier's `BLOCKERS` value verbatim to the **same** implementer instance,
-warm, not to a new agent. A fix on warm context costs a fraction of a fresh spawn.
-
-If no warm implementer exists, because the pull request was opened by an earlier
-run or by hand, spawn a fresh one briefed only on the blocking findings and the
-pull request number. Say so in the log row: a cold remediation is a different and
-weaker thing than a warm one, and the row is the only place that distinction
-survives.
-
-At most **2** rounds. Only findings the verifier marks blocking are actionable.
-The implementer may not edit the verdict file. If the verifier still returns HOLD
-after round 2, move the story to `5_blocked`, log `blocked :: remediation
-exhausted` with the leftovers, and stop.
-
-The risk being managed: a verifier that sees its own prior verdict addressed
-starts grading the response instead of the code. Fresh verifier context per round
-is what prevents that, and it is not negotiable.
-
 ## Teams and lanes
 
-Applies only when the adapter declares a `Teams` table; without one, this section is
-inert and everything above holds unchanged. A team is a lane of the queue: its own
-ordered stories, one in flight at a time, so independent surfaces progress in
-parallel without sharing a chain.
-
-| Concern | Rule |
-|---|---|
-| Dispatch | One story in flight per team. On start, on resume and on every wake, dispatch every idle team's head, `"$LS" eligible <queue-root> <log> --team <name> <adapter>`, at once, up to `Phase-1 cap` implementers working without a lane |
-| Phases | Lanes >= teams: every brief is `PHASE: full`, no lock. Lanes < teams: every brief is `PHASE: 1`, which touches no shared runtime and returns `OUTCOME: phase1` |
-| Granting a lane | Append `wait` to the lock on each `phase1` return. While a lane is free, promote the oldest `wait` to `held` with a lane number and send that implementer the phase-2 text from [implementer-brief.md](implementer-brief.md) |
-| Release | Remove the `held` line only after the story's merge, or its final routing when the loop does not merge, **and** a return reporting `STACK: down` or `none`. Remediation may need the runtime, and the next holder should test against a base that already has this story |
-| Log | `phase1` writes no row. The row is written once, at the end of phase 2, so `eligible` and `head` see exactly what they see without teams |
-| Parent | `"$LS" parent <log> <base> dag <deps>`: no-dependency stories branch from the declared base, never from another team's head. Merge-as-you-go: a story branch behind the base gets the base merged into it by its implementer, never rebased |
-| Merges | Only where the operator has granted merge-as-you-go. The orchestrator serializes them, one at a time, oldest clean verdict first, re-checking each branch is not behind the base before merging |
-| Throughput | Never idle on one story while another team has eligible work. Verifiers, remediation and closeouts run while other teams' implementers work; waiting on any of them is a reason to dispatch, not to sleep |
-| Blocked count | Two consecutive `blocked` rows stop **that team**, not the loop. A team with nothing eligible idles until a dependency lands |
-| Loop-wide stops | Escalation, evidence holds, MERGE AFTER FIXES, exhausted remediation and the authorization boundary stop new dispatch in every team. In-flight implementers finish their current phase and log; nothing new starts |
-
-The lock file, one line per lane holder or waiter, tab-separated:
-
-```
-held	<id>	<team>	<lane>	<utc>
-wait	<id>	<team>	-	<utc>
-```
-
-`wait` lines are kept oldest first. An empty or missing file means every lane is free.
-
-**Resume.** A fresh session reconstructs state without asking, from the log, the state
-folders, the lock file and the remote's story branches, first match wins:
-
-| Source | Says |
-|---|---|
-| Log row for the id | Phase 2 finished. Its state folder names the next step: `4_in-review` verify or merge, `5_blocked` nothing, `6_completed` merge if not yet merged |
-| `held` line, no row | Phase 2 was granted. Re-dispatch phase 2 cold on the existing branch, same lane |
-| `wait` line, no row | Phase 1 finished. Keep its place in the line |
-| Story branch on the remote, no row, no lock line | Phase 1 interrupted. Re-dispatch phase 1 cold; the brief continues the existing branch |
-| None of these | Not started. The team's head as usual |
-
-Story branches are found by name on the remote (`git ls-remote --heads`), which
-reads no content. A `held` line whose story has a row is a stale grant: release it,
-then dispatch.
+Only when the adapter declares a `Teams` table: [teams.md](teams.md). Without one,
+nothing there applies.
 
 ## Log
 
@@ -295,7 +225,19 @@ One file, path from the adapter, deliberately untracked, because the chain roots
 at the base branch and a tracked log would reset itself every chain.
 
 Columns: `Story | Outcome | PR | Branch | Base | AC | CI | Verdict | Notes`.
-`Branch` and `Base` together are the chain.
+`Branch` and `Base` together are the chain. A workspace queue writes `Branch` as
+`<repo>:<branch>` ([adapter.md](adapter.md)).
+
+`Outcome` is one of `landed`, `partial`, `blocked`, `escalated` or `stop`. The
+shorthand `blocked :: <reason>` and `escalated :: <score>` means that outcome with
+the rest in `Notes`. `escalated` is a story stopped for a human at or above the
+escalation threshold; its file goes to `5_blocked` like a blocked one. `stop` is the
+final row a stop condition writes, with `-` for the story. Only `landed` and
+`partial` advance the chain. A row records its merge with a `Notes` cell that starts
+with `merged`. `append` trims only `stop` rows older than the newest 50 rows. Every
+story row stays, merged ones included, because `eligible` excludes a story only by
+its row and a queue root may not yet show the merge. `depth` counts only unmerged
+chained rows.
 
 **Escalation rides in the `Verdict` cell**, as `<verdict>(<score>)`: `HOLD(9)`,
 `MERGE AFTER FIXES(0)`, `MERGE(0)`, `absent` when no verifier is configured. It is
@@ -310,3 +252,20 @@ Append with:
 ```
 
 Empty fields become `-`. Cold start reads this file and nothing else.
+
+## Cost
+
+The orchestrator is the most expensive context in the run; spend it on routing
+only.
+
+- **Model tiers come from the adapter.** Dispatch implementer, verifier and filer
+  at their configured tiers. Never resume a fork of the orchestrator to file or
+  groom stories: it carries the whole session's context for a bookkeeping task.
+- **Heavy CI is not per-change.** The implementer runs scoped checks and says
+  what ran; full runs go to the adapter's `Full runs at`, one narrowed e2e dispatch
+  (`Narrowed e2e`) is the fallback, and one full run per check is the ceiling. See
+  [adapter.md](adapter.md).
+- **The verifier runs on every pull request.** It triggers no workflow.
+- **Rules live in definitions, not dispatches.** A rule that an agent must follow
+  goes in its agent definition or a brief slot. Restating it in each dispatch
+  costs tokens every time and survives no session.
