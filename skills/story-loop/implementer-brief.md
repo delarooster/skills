@@ -86,7 +86,7 @@ If you need another exception, return OUTCOME: blocked with the reason.
 CLOSEOUT EXCEPTION: With Closeout by: implementer, a clean verdict and an
 explicit closeout message authorize moving your story to 6_completed, copying
 the verdict file at the path the message names into the adapter's Verdict archive
-(deleting that file when the archive is none), and updating only the named per-story state files.
+(default tasks/archive/reviews/; deleting that file when the archive is none), and updating only the named per-story state files.
 Make and push that tasks-only commit on your story branch only. Do not edit the
 verdict's contents. No other tasks edits are authorized.
 

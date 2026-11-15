@@ -137,35 +137,27 @@ the repo holding the adapter, never the caller's cwd: read them with
 **Escalation threshold.** The score at or above which the loop stops for a human
 instead of remediating. It requires a verifier that satisfies the return
 contract in [verify.md](verify.md); with `Verifier: none` it is
-inert. `0` or `1` escalates every BLOCKING hold; above `10` never escalates one,
-which is a choice worth making deliberately or not at all.
+inert. `0` or `1` escalates every BLOCKING hold; above `10` never escalates one.
 
-**Merge policy.** A per-repo decision: teams differ in how comfortable they are
-with agentic merges, so the safe default holds. `never` leaves every pull request
-for a human. `clean-verdict`, opt-in and set explicitly,
-lets the loop merge a story's pull request through the forge's merge verb
+**Merge policy.** `never` (default) leaves every pull request for a human.
+`clean-verdict`, opt-in, merges through the forge's merge verb
 ([chain.md](chain.md)), merge commit only, when `"$LS" merge-gate` passes: verdict
 `MERGE`, BLOCKING 0, ESCALATION 0, CI green on the closeout head, every unmet
-acceptance criterion filed forward as its own story, and no category of the story
-in `Human-only categories`. The escalation threshold still routes first. A human
-sets this field and records why in the repo's decision log; the loop never
-proposes changing it.
+acceptance criterion filed forward as its own story, and no story category in
+`Human-only categories`. A human sets it and records why in the repo's decision
+log; the loop never proposes changing it.
 
-**Remediate should-fix.** `off` (default): a MERGE AFTER FIXES verdict stops
-the loop for a human. `on`: the loop remediates the SHOULD FIX findings for at
-most 2 rounds, a fresh verifier each round, then applies the merge policy.
-BLOCKING remediation below the escalation threshold is unaffected by this field.
+**Remediate should-fix.** Routing for MERGE AFTER FIXES:
+[verify.md](verify.md#escalation). BLOCKING remediation is unaffected.
 
 **Human-only categories.** Comma list matched against the story's optional
 `**Categories:**` header. A story in any of them never merges unattended: its pull
 request waits for the full suite and a person. Deleting the defaults is a decision,
 not a cleanup.
 
-**Verdict dir.** Applies only to a verifier that takes an output directory: it
-writes `pr-<N>.md` there, outside every checkout, so a verdict never rides a story
-branch by accident and never dirties the main checkout. A verifier that writes into
-the checkout instead ([verify.md](verify.md#verifier-subagent)) ignores it. Either
-way the loop uses the `PATH` the verifier returns, never a path built from this field.
+**Verdict dir.** Only for a verifier that takes an output directory; it keeps
+verdicts off story branches and out of the main checkout. The loop always uses the
+returned `PATH`, never a path built from this field.
 
 **Verdict archive.** Where the closeout commit copies a clean verdict, default
 `tasks/archive/reviews/`, copied from the `PATH` the verifier returned. `none`:
@@ -178,10 +170,8 @@ GitHub native stack when the `gh stack` extension and the stacks API are availab
 and skip with a log note when they are not. `off`: never link; git branches carry
 the chain alone ([native-stacks.md](native-stacks.md)).
 
-**Review list.** A file path outside every checkout. `none` (default): a MERGE AFTER
-FIXES that remediation did not clear, and any operator sign-off a story asks for,
-stop the loop. With a path, both go on the list and the loop continues
-([verify.md](verify.md#review-list)).
+**Review list.** A file path outside every checkout; see
+[verify.md](verify.md#review-list).
 
 **CI.** Heavy jobs (image builds, the end-to-end suite, deploys) belong off the
 per-change path: nightly plus manual dispatch, and deploys on dispatch alone. Draft
@@ -211,18 +201,11 @@ recipes tear down a throwaway runner and must not be copied to a workstation.
 database; skipped database tests are a defect to report, not an outcome. Shared
 environments are seeded add-only.
 
-**Implementer agent.** The agent type the runner spawns for each story. A repo
-whose implementer rules live in its own agent definition names it here, so those
-rules reach every dispatch rather than depending on which agent the orchestrator
-picks. If the named agent is not installed, the runner falls back to
-`general-purpose` with the whole brief template.
+**Implementer agent.** The agent type spawned for each story, so a repo's own
+implementer rules reach every dispatch. If it is not installed, the runner falls
+back to `general-purpose` with the whole brief template.
 
-**Closeout by.** Who makes the closeout commit on a clean verdict
-([orchestrator.md](orchestrator.md#closeout)). `orchestrator`: the orchestrator
-commits `tasks/` only on the story branch. `implementer`: the orchestrator sends the
-closeout to the warm implementer, which commits and pushes it; use this where the
-repo's git rules let only implementers commit. Either way it is the last commit on
-the branch, and nothing is written in the main checkout.
+**Closeout by.** See [orchestrator.md](orchestrator.md#closeout).
 
 **Full runs at.** Where full test suites, full builds and end-to-end runs happen.
 `ci` (default): the implementer runs only scoped checks for what it changed and
@@ -281,10 +264,3 @@ else: one implicit team, one story in flight. Behaviour: [teams.md](teams.md).
 
 `"$LS" teams <adapter>` prints `team<TAB>id,id,...` per team; empty means one
 implicit team.
-
-## Why not arguments
-
-The loop is invoked by the host's repeat mechanism, which replays one fixed
-prompt. Configuration passed as arguments would have to be retyped identically
-every iteration, and would be lost on a cold start. It lives in a file for the
-same reason the log does.

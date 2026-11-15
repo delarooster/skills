@@ -1,7 +1,7 @@
 ---
 name: story-loop
 description: Run one queue-driven implementation iteration -- pick the next eligible story, hand it to a fresh subagent to implement and open a stacked pull request, dispatch a verifier, and log the result. Use when asked to "run the story loop", "work the backlog", "drain the story queue", "implement the next story", or invoke `/story-loop`; wrap it in the host's loop mechanism to run continuously.
-compatibility: Requires git and a repo whose stories follow the plan-project folder state machine. Pull request creation additionally requires an authenticated forge CLI (`gh` or `az`); without one, set forge to none and the loop chains branches only. GitHub native stacking optionally uses the `gh stack` extension (`github/gh-stack`); without it, or with `Native stacks: off`, pull requests stack on git branches alone.
+compatibility: "Requires git and a repo whose stories follow the plan-project folder state machine. Pull request creation additionally requires an authenticated forge CLI (`gh` or `az`); without one, set forge to none and the loop chains branches only. GitHub native stacking optionally uses the `gh stack` extension (`github/gh-stack`); without it, or with `Native stacks: off`, pull requests stack on git branches alone."
 ---
 
 # Story Loop
@@ -39,39 +39,31 @@ the branch, unprompted, by whoever the adapter's `Closeout by` names. An iterati
 that ends without closing out is not finished.
 
 **With the default `Merge policy: never`, the loop never merges anything.**
-Merging follows the adapter's `Merge policy`, a per-repo decision. Teams
-differ in how much they trust an unattended merge, so the default is `never` and
-`clean-verdict` is opt-in, set explicitly in the repo's adapter. Under `never` the
-loop never merges. Under `clean-verdict` the orchestrator, and only the
-orchestrator, merges a story's own pull request with the forge's merge verb, merge
-commit only, after the closeout commit is on the branch and `"$LS" merge-gate`
-prints `merge`. A story in any of the adapter's `Human-only categories` is never
-merged by the loop. An escalation at or above the threshold stops for a human
-before any of this is considered.
+`clean-verdict` is opt-in, set by a human in the repo's adapter. Under it the
+orchestrator alone merges a story's own pull request, merge commit only, after the
+closeout commit is on the branch and `"$LS" merge-gate` prints `merge`. Never a
+story in the adapter's `Human-only categories`, and never past an escalation at or
+above the threshold.
 
 **It never authorizes:** any other merge (an implementer may merge its parent into
 its own story branch to freshen it, never rebase, and merges into no other branch), force push, rebase, reset, amend, tag
 operations, branch deletion, any direct push to the base branch or to
 `main`/`master`/`develop`, git config changes, hook bypass, or edits to `tasks/`
 in the main checkout. The rule covers tracked edits: the log and a verifier's
-verdict file written into the checkout are untracked local state. It includes the adapter: `tasks/story-loop.md` is written on a
+verdict file written into the checkout are untracked local state. It includes the adapter and a handoff file: each is written on a
 branch and lands through a tasks-only pull request. A subagent that believes it needs one of these must return
 `blocked` with the reason instead.
 
 ## The orchestrator reads nothing
 
 You are the orchestrator. You **must not** read source files, diffs, verdict
-bodies, test output or CI logs, and you **must not** implement or edit story
-contents. The only write exceptions are the fixed state-folder moves and
-tasks-only state commits in [orchestrator.md](orchestrator.md), and the merge the
-adapter's merge policy allows. Derive every decision from
-story headers and the log using `scripts/loop-state.sh`. Full contract and budget:
-[orchestrator.md](orchestrator.md). That script has its own tests:
-`scripts/selftest.sh` and `scripts/e2e-chain.sh`, both safe to run anywhere.
-`scripts/anchor-check.sh` keeps the code anchors stories cite honest, tested by
-`scripts/anchor-selftest.sh`. It is not an iteration step: run `resolve` from the repo
-root when filing or grooming stories, and `lost <rev>` after a change that renamed or
-deleted files, to find stories whose anchors broke.
+bodies, test output or CI logs, or implement or edit story contents. Derive every
+decision from story headers and the log using `scripts/loop-state.sh`. Write
+exceptions and budget: [orchestrator.md](orchestrator.md). The script's tests,
+`scripts/selftest.sh` and `scripts/e2e-chain.sh`, are safe to run anywhere.
+`scripts/anchor-check.sh` (tested by `scripts/anchor-selftest.sh`) keeps cited code
+anchors honest. It is not an iteration step: run `resolve` from the repo root when
+filing or grooming stories, and `lost <rev>` after renaming or deleting files.
 
 ## One iteration
 
@@ -132,14 +124,9 @@ deployed skill directory differs per host, so resolve it rather than assume it.
    its Notes starting `merged` when it merged. The row comes last.
 
    On a clean verdict, that move is part of the
-   [closeout commit](orchestrator.md#closeout): story into `6_completed`, verdict
-   copied from the `PATH` the verifier returned into the adapter's `Verdict archive`
-   (or deleted, when that is `none`), `tasks/` only, on the branch, by the adapter's `Closeout by`. A finished iteration leaves
-   nothing for the next one to file.
-
-   **Closeout before merge.** Under `Merge policy: clean-verdict`, merge only after
-   the closeout commit is pushed and CI is green on that head; a closeout deferred
-   past the merge has no branch left to ride.
+   [closeout commit](orchestrator.md#closeout). **Closeout before merge:** under
+   `clean-verdict`, merge only after it is pushed and CI is green on that head; a
+   closeout deferred past the merge has no branch left to ride.
 
 8. **Stop or continue** against the conditions below.
 
@@ -163,12 +150,14 @@ deployed skill directory differs per host, so resolve it rather than assume it.
 With teams, a team with nothing eligible idles; it does not stop the loop. The other
 stops halt new dispatch in every team and let in-flight work finish its phase.
 
-Every stop writes a final log row naming which condition fired. If a story
+Every stop writes the session state to the repo first
+([orchestrator.md](orchestrator.md#state-lives-in-the-repo)), then a final log row naming
+which condition fired. If a story
 completed in the same iteration, that is two rows: the story's, then the stop.
 
 A stop that needs the operator tells them with an operator brief per item: id,
-title, one line on what it is, a link to where the file lives now, and the ask.
-Format: [orchestrator.md](orchestrator.md#operator-brief).
+title, one line on what it is, links to the pull request and the story file where it
+lives now, and the ask. Format: [orchestrator.md](orchestrator.md#operator-brief).
 
 Open defects not yet fixed: [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 
@@ -178,6 +167,7 @@ Open defects not yet fixed: [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 - [ ] Parent computed by the orchestrator, never by the implementer
 - [ ] Returned `BASE` checked against the supplied parent
 - [ ] Exactly one log row appended, including for blocked and escalated stories
+- [ ] Before a stop or context clear: log, review list and any handoff file written in the repo, not memory
 - [ ] BLOCKING route taken from the escalation score alone, never from the summary
 - [ ] Evidence holds stopped outside score routing; `CONCERN` surfaced verbatim
 - [ ] MERGE AFTER FIXES and sign-offs stopped, or listed when a `Review list` exists

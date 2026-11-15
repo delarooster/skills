@@ -23,23 +23,18 @@ absence is itself a finding.
 
 Read back the return fields, in the verifier definition's order: `VERDICT`,
 `HOLD_REASON`, `BLOCKING`, **`ESCALATION`**, `BLOCKERS`, `CONCERN` (optional),
-`SUMMARY`, `PATH`. Never open the verdict file. It lives at the returned `PATH`; a
-relative `PATH` resolves against the directory the verifier ran in. A verifier that
-takes an output directory writes into the adapter's `Verdict dir` (read with
-`adapter-path`). One that writes `tasks/reviews/pr-<N>.md` relative to where it
-runs, as the `pr-judge` in the public skills repo does, writes into the checkout:
-with that judge the verdict file is untracked local state, which the closeout copies
-into `Verdict archive` or deletes.
+`SUMMARY`, `PATH`. Never open the verdict file. A relative `PATH` resolves against
+the directory the verifier ran in. A verifier that takes an output directory writes
+into the adapter's `Verdict dir` (read with `adapter-path`); one that writes
+`tasks/reviews/pr-<N>.md` where it runs leaves untracked local state, which the
+closeout copies into `Verdict archive` or deletes.
 
 **`CONCERN` is a second channel, not a route.** Surface it to the operator
 verbatim, whatever the score, and put it in the log row's Notes when it is not
 `none`. It never changes the route. It carries what the scale deliberately scores
-0: a pre-existing defect the pull request uncovered, a fabricated citation, a claim
-evidenced nowhere. Inflating a score so someone notices breaks the scale; the
-channel is what makes that unnecessary. A verifier that returns no `CONCERN` line
-is read as `CONCERN: none`. To make a verifier report concerns, put the line in its
-definition, not in the dispatch: a rule carried in dispatch text dies with the
-session that wrote it.
+0, such as a pre-existing defect or a fabricated citation, so no score is inflated
+to be noticed. No `CONCERN` line reads as `CONCERN: none`. The line belongs in the
+verifier's definition, not the dispatch.
 
 ## Escalation
 
@@ -96,11 +91,6 @@ line means `none` and is never grounds to reject a return. Require the returned 
 to exist without opening it, resolving a relative `PATH` as above. Reject any other combination once for
 correction, then log `blocked :: bad return`.
 
-**The threshold spends a human's attention.** Every escalation is a claim that a
-person must look now. Every non-escalation is a claim that two automated rounds
-will do. Both are expensive when wrong, in opposite directions, so the scale is
-anchored in the verifier definition rather than left to taste.
-
 Escalation never authorizes a merge. It decides only who reads the verdict; the
 merge policy decides the rest.
 
@@ -138,10 +128,6 @@ run the forge's merge verb ([chain.md](chain.md)), merge commit only, and start 
 log row's Notes with `merged`. On `hold :: <reason>`, leave the pull request open, note
 the reason, and continue: a held merge is a human's queue, not a blocked story.
 
-Merging as each verdict comes back clean keeps the chain shallow: the next story's
-parent is then the base ([chain.md](chain.md), "A merged parent is the base"), and
-two stories editing one file resolve at the merge instead of piling up.
-
 ## Remediation rounds
 
 Relay the verifier's `BLOCKERS` value verbatim to the **same** implementer instance,
@@ -163,6 +149,5 @@ The implementer may not edit the verdict file. If the verifier still returns HOL
 after round 2, move the story to `5_blocked`, log `blocked :: remediation
 exhausted` with the leftovers, and stop.
 
-The risk being managed: a verifier that sees its own prior verdict addressed
-starts grading the response instead of the code. Fresh verifier context per round
-is what prevents that, and it is not negotiable.
+Fresh verifier context every round is not negotiable: a verifier that sees its own
+prior verdict addressed grades the response instead of the code.

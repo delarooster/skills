@@ -10,35 +10,22 @@ merge the adapter's merge policy allows; native stack linking (`gh stack link`);
 creating the story branch and worktree where the runner says the orchestrator does
 (Codex, OpenCode); a
 missing adapter written on its own branch with a tasks-only pull request (with
-`Forge: none`, push that branch and stop for the operator); and, with teams, writes
-to the stack lock file.
+`Forge: none`, push that branch and stop for the operator); the state write in
+[State lives in the repo](#state-lives-in-the-repo), on its own branch with a
+tasks-only pull request; and, with teams, writes to the stack lock file.
 
-The point is not tidiness. The orchestrator that never reads a diff cannot talk
-itself into believing a story landed. It sees only what the subagent claims and
-what the verifier independently found, and it verifies the one claim it can.
+An orchestrator that never reads a diff cannot talk itself into believing a story
+landed; it verifies the one claim it can.
 
 ## Per iteration
 
-1. Resolve `Queue root`, `Log path` and `Verdict dir` with `"$LS" adapter-path`
-   (never `adapter`, whose relative values would resolve against the cwd). Read the
-   log and the story index. `"$LS" index <queue-root>` emits
-   `id<TAB>deps<TAB>effort<TAB>path` and nothing else. Never open a story body.
-2. Select the next eligible story.
-3. Compute its parent branch. See [chain.md](chain.md).
-4. Spawn the implementer.
-5. Check the returned `BASE` against the parent supplied, before any verifier runs.
-6. Spawn the verifier and relay bounded findings to the implementer.
-7. Move the story file per the state machine; on a clean verdict, as the closeout commit.
-8. Under `Merge policy: clean-verdict`, merge after closeout if the gate passes.
-9. Append exactly one row to the log, its Notes starting `merged` when step 8 merged.
-10. Decide whether to continue.
+The steps are in [SKILL.md](SKILL.md#one-iteration). `"$LS" index <queue-root>`
+emits `id<TAB>deps<TAB>effort<TAB>path` and nothing else; never open a story body.
 
-If an adapter already exists but its configured untracked log does not, stop for
-state reconciliation before selecting a story. A fresh checkout cannot infer which
-queued files already have active story branches or pull requests. Continue only
-after the operator restores the log or confirms the queue has no active work; then
-initialize a new log. This guard does not apply while creating an adapter on a
-genuine first run.
+A missing log under an existing adapter stops the loop: a fresh checkout cannot tell
+which queued files already have active branches or pull requests. Continue only
+after the operator restores the log or confirms the queue has no active work, then
+initialize a new one. A genuine first run, creating the adapter, is exempt.
 
 If you ever need a story body to decide, the story is underspecified. Log
 `blocked :: underspecified` and move on. That is a planning defect, and repairing
@@ -71,14 +58,9 @@ folder is fixed:
 | `escalated` | `5_blocked` | A score at or above the escalation threshold; a human decides |
 
 `6_completed` means merged, or on a branch whose only remaining step is the
-merge. Whether or not the loop merges, it does not leave the filing to "whoever
-merges the chain" -- that is how stories end up shipped and still sitting in
-`1_backlog`. When the verifier returns a clean verdict, the
-[closeout commit](#closeout) moves the story to `6_completed` from whatever folder it
-is in on the branch, **on the branch**, so the ledger lands at the same instant the merge does and dies with the
-branch if the pull request is abandoned. **The folder is load-bearing either
-way.**
-The log is untracked and starts empty on a fresh checkout, so `6_completed` is the
+merge. The [closeout commit](#closeout) files it there **on the branch**, so the
+ledger lands with the merge and dies with an abandoned pull request; never leave
+filing to "whoever merges the chain". **The folder is load-bearing.** The log is untracked and starts empty on a fresh checkout, so `6_completed` is the
 only durable record that a story finished, and `"$LS" completed <queue-root>`
 reads it to satisfy dependencies. Move merged stories there and nowhere else.
 
@@ -190,34 +172,54 @@ remediation rounds.
 When the operator asks to be pinged or told before a step (a first run, a deploy, a
 delete, a scale-down, anything they want to watch), stop on the host's question tool
 with one clear choice, recommended option first (for example "I'm online, start" /
-"Not yet"), and do no further work past the gate. Never leave a "let me know" status
-line and keep working: it scrolls away, and the operator finds the orchestrator
-waiting only after scrolling up. While waiting on background agents, do not emit
+"Not yet"), and do no further work past the gate. A "let me know" status line
+scrolls away unseen. While waiting on background agents, do not emit
 repeated status chatter.
 
 ## Operator brief
 
-"Surface" means a brief, not an id. Progress updates while the loop runs may name
-stories by id alone. Anything that asks the operator to act -- an escalation, a hold,
-a stop, a pending decision, a newly filed item they must rule on -- carries one brief
-per story or decision involved:
+"Surface" means a brief, not an id. In anything the operator reads, tables included,
+name each story, pull request or decision first by what it is in plain words, then its
+id as a clickable link; an id never stands alone. `<id>` alone is wrong; "Retry failed
+card payments ([<id>](<story url>))" is right.
+
+**No machine numbers.** Never show a CI run, build or job id: name the run by what it
+is ("the staging deploy", "the mobile store build") and link it if that helps. A git
+hash appears only when the operator needs it to act, as the 7-character short SHA.
+
+Anything that asks the operator to act -- an escalation, a hold, a stop, a pending
+decision, a newly filed item they must rule on -- carries one brief per item:
 
 | Field | Source |
 |---|---|
 | Id and title | The story's `# ` heading, which the index already reads |
 | What it is | One plain-language line, plus the verifier's summary when there is one |
-| Link | Absolute path to the file where it lives **now** |
-| The ask | The single decision or action needed, with its options |
+| Links | The pull request's forge URL; the story file as a forge URL on the branch where it lives **now**, or its absolute path when unpushed; the verdict or decision the ask rests on |
+| The ask | The single decision or action needed, its options, recommended one first |
 
-Resolve the link at the moment of writing, from the tree where the queue actually
-advances: the branch stories stack onto, not a checkout that may be behind it.
-Story files move between state folders and worktrees, and a stale path costs the
-operator a search for every item. Writing the brief opens no story body.
+**Open asks never block the loop** when a `Review list` is set. Outside an
+[operator gate](#operator-gates), write each ask at once to that list
+([verify.md](verify.md#review-list)) and to a closing "Needs you" section, one
+numbered brief each, then keep working on everything that does not depend on the
+answer. On the next wake, read the list for answers before asking again.
+
+Resolve links when writing, from the branch stories stack onto, not a checkout that
+may be behind it: story files move, and a stale link costs the operator a search.
+Writing the brief opens no story body.
 
 ## Teams and lanes
 
 Only when the adapter declares a `Teams` table: [teams.md](teams.md). Without one,
 nothing there applies.
+
+## State lives in the repo
+
+Before a context clear or compaction, at every stop, and when the operator says a
+refresh is coming, write the state first: one log row per story touched, new asks
+on the `Review list`, and, when the repo's notes name a handoff file, that file
+overwritten with current state only, on its own branch through a tasks-only pull
+request, never in the main checkout. A fresh session resumes from those alone; agent
+memory and the transcript hold at most a pointer.
 
 ## Log
 
@@ -241,9 +243,8 @@ chained rows.
 
 **Escalation rides in the `Verdict` cell**, as `<verdict>(<score>)`: `HOLD(9)`,
 `MERGE AFTER FIXES(0)`, `MERGE(0)`, `absent` when no verifier is configured. It is
-not a tenth column, deliberately, because `LOG_COLS` in `loop-state.sh` is asserted
-by `scripts/selftest.sh` and a schema change there costs more than it buys. A run
-that escalated is then greppable: `grep -E '\((8|9|10)\)' <log>`.
+not a tenth column: `LOG_COLS` in `loop-state.sh` is asserted by
+`scripts/selftest.sh`. Find escalations with `grep -E '\((8|9|10)\)' <log>`.
 
 Append with:
 
@@ -261,11 +262,8 @@ only.
 - **Model tiers come from the adapter.** Dispatch implementer, verifier and filer
   at their configured tiers. Never resume a fork of the orchestrator to file or
   groom stories: it carries the whole session's context for a bookkeeping task.
-- **Heavy CI is not per-change.** The implementer runs scoped checks and says
-  what ran; full runs go to the adapter's `Full runs at`, one narrowed e2e dispatch
-  (`Narrowed e2e`) is the fallback, and one full run per check is the ceiling. See
-  [adapter.md](adapter.md).
-- **The verifier runs on every pull request.** It triggers no workflow.
+- **Heavy CI is not per-change**, and the verifier runs on every pull request and triggers
+  no workflow: [adapter.md](adapter.md) (`CI`, `Full runs at`).
 - **Rules live in definitions, not dispatches.** A rule that an agent must follow
   goes in its agent definition or a brief slot. Restating it in each dispatch
   costs tokens every time and survives no session.
