@@ -8,14 +8,10 @@ checkout. It may perform only the fixed story file moves below, on the story
 branch; the closeout commit when the adapter's `Closeout by` is `orchestrator`; the
 merge the adapter's merge policy allows; native stack linking (`gh stack link`);
 creating the story branch and worktree where the runner says the orchestrator does
-(Codex, OpenCode); a
-missing adapter written on its own branch with a tasks-only pull request (with
-`Forge: none`, push that branch and stop for the operator); the state write in
-[State lives in the repo](#state-lives-in-the-repo), on its own branch with a
-tasks-only pull request; and, with teams, writes to the stack lock file.
-
-An orchestrator that never reads a diff cannot talk itself into believing a story
-landed; it verifies the one claim it can.
+(Codex, OpenCode); a missing adapter on its own branch with a tasks-only pull request
+(with `Forge: none`, push that branch and stop for the operator); the
+[handoff write](#session-state); and, with teams, writes to the stack lock
+file.
 
 ## Per iteration
 
@@ -46,8 +42,7 @@ stem.
 
 ## Where the story file lands
 
-"Per the state machine" is not enough to act on. The mapping from outcome to
-folder is fixed:
+The mapping from outcome to folder is fixed:
 
 | Outcome | Move the story file to | Why |
 |---|---|---|
@@ -67,8 +62,7 @@ reads it to satisfy dependencies. Move merged stories there and nowhere else.
 **Never archive story files out of the queue root.** Moving them to
 `tasks/archive/` or any path outside `<queue-root>` deletes them from the
 dependency ledger, and every story that depends on one is then reported
-`dependency unsatisfiable` forever. The queue root is the ledger; archiving is
-for session records, not for stories. `3_in-progress` is optional and only ever on
+`dependency unsatisfiable` forever. `3_in-progress` is optional and only ever on
 the story branch: an implementer may move its own file there while it works, and
 it leaves before the log row is appended, so a resumed run sees a consistent tree.
 
@@ -136,8 +130,6 @@ brief from memory: the omitted-parent failure in [chain.md](chain.md) is what th
 produces.
 
 Its job ends at "pull request is open against the parent"; it does not wait on CI.
-It does not merge its pull request (freshening its own branch from the parent is
-allowed), and it does not choose its own base.
 
 **`CI: pending` is a valid return.** It means the implementer stopped waiting, not
 that anything failed. Before dispatching the verifier, wait on the forge's checks
@@ -150,8 +142,7 @@ warm implementer.
 ## Return contract
 
 The ten fields, and the brief that demands them, are in
-[implementer-brief.md](implementer-brief.md). It is the template you send, so it
-carries the contract verbatim; do not restate the fields here or anywhere else.
+[implementer-brief.md](implementer-brief.md). Do not restate the fields elsewhere.
 
 Validate on receipt. A non-conforming return is rejected and re-requested once,
 then logged `blocked :: bad return`. A subagent that returns a diff has defeated
@@ -172,16 +163,17 @@ remediation rounds.
 When the operator asks to be pinged or told before a step (a first run, a deploy, a
 delete, a scale-down, anything they want to watch), stop on the host's question tool
 with one clear choice, recommended option first (for example "I'm online, start" /
-"Not yet"), and do no further work past the gate. A "let me know" status line
-scrolls away unseen. While waiting on background agents, do not emit
+"Not yet"), and do no further work past the gate. Never leave a "let me know" status
+line and keep working: it scrolls away, and the operator finds the orchestrator
+waiting only after scrolling up. While waiting on background agents, do not emit
 repeated status chatter.
 
 ## Operator brief
 
 "Surface" means a brief, not an id. In anything the operator reads, tables included,
 name each story, pull request or decision first by what it is in plain words, then its
-id as a clickable link; an id never stands alone. `<id>` alone is wrong; "Retry failed
-card payments ([<id>](<story url>))" is right.
+id as a clickable link; an id never stands alone: "Retry failed card payments
+([<id>](<story url>))".
 
 **No machine numbers.** Never show a CI run, build or job id: name the run by what it
 is ("the staging deploy", "the mobile store build") and link it if that helps. A git
@@ -192,16 +184,16 @@ decision, a newly filed item they must rule on -- carries one brief per item:
 
 | Field | Source |
 |---|---|
-| Id and title | The story's `# ` heading, which the index already reads |
+| Title and id | The story's `# ` heading, which the index already reads |
 | What it is | One plain-language line, plus the verifier's summary when there is one |
 | Links | The pull request's forge URL; the story file as a forge URL on the branch where it lives **now**, or its absolute path when unpushed; the verdict or decision the ask rests on |
 | The ask | The single decision or action needed, its options, recommended one first |
 
-**Open asks never block the loop** when a `Review list` is set. Outside an
-[operator gate](#operator-gates), write each ask at once to that list
-([verify.md](verify.md#review-list)) and to a closing "Needs you" section, one
-numbered brief each, then keep working on everything that does not depend on the
-answer. On the next wake, read the list for answers before asking again.
+**With a `Review list`, the asks its table names do not block the loop**
+([verify.md](verify.md#review-list)): write each at once as one line in that list's
+format, repeat it under a closing "Needs you" section, and keep working on
+everything that does not depend on the answer. Every other stop condition still
+stops. On the next wake, read the list for answers before asking again.
 
 Resolve links when writing, from the branch stories stack onto, not a checkout that
 may be behind it: story files move, and a stale link costs the operator a search.
@@ -209,16 +201,17 @@ Writing the brief opens no story body.
 
 ## Teams and lanes
 
-Only when the adapter declares a `Teams` table: [teams.md](teams.md). Without one,
-nothing there applies.
+Only when the adapter declares a `Teams` table: [teams.md](teams.md).
 
-## State lives in the repo
+## Session state
 
 Before a context clear or compaction, at every stop, and when the operator says a
-refresh is coming, write the state first: one log row per story touched, new asks
-on the `Review list`, and, when the repo's notes name a handoff file, that file
-overwritten with current state only, on its own branch through a tasks-only pull
-request, never in the main checkout. A fresh session resumes from those alone; agent
+refresh is coming, write the state first. On disk at their adapter paths: the row of each
+unlogged story past its merge, or its final routing when the loop will not merge it,
+and new `Review list` asks. When the adapter's repo notes name a handoff file under `tasks/`,
+overwrite it with current state, unlogged stories included, on its own branch
+through a tasks-only pull request, reusing an open one (with `Forge: none`, push
+only). This write never stops the loop. A fresh session resumes from those alone;
 memory and the transcript hold at most a pointer.
 
 ## Log
@@ -252,7 +245,7 @@ Append with:
 "$LS" append <log> <story> <outcome> <pr> <branch> <base> <ac> <ci> <verdict> <notes>
 ```
 
-Empty fields become `-`. Cold start reads this file and nothing else.
+Empty fields become `-`.
 
 ## Cost
 

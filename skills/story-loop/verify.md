@@ -104,7 +104,7 @@ operator nothing below the escalation threshold.
 | `MERGE AFTER FIXES`, score below threshold, not cleared by should-fix remediation | stop, operator brief | treat as clean, append one line |
 | A story or repo rule asks the operator to sign off copy, a translation or a migration, and the verifier passed it | stop, ask | take the implementer's default, append one line |
 
-One line per item: `- [ ] <id> PR <n> | <what was accepted> | <verifier summary>`. Mark a
+One line per item: `- [ ] <title> ([<id>](<story url>)) | [PR <n>](<pr url>) | <what was accepted> | <verifier summary>`. Mark a
 line `RELEASE-RISK` when it could harm production data or users. The list gates the
 release, not the loop: every open line for a release is cleared with the operator
 before its tag, and a `RELEASE-RISK` line blocks the tag. A listed story still meets

@@ -225,7 +225,8 @@ and never a fork of the orchestrator's context.
 
 ## Repo notes
 
-Rules that are the repo's own go in prose below the table. Two apply everywhere:
+Rules that are the repo's own, a [handoff file](orchestrator.md#session-state) among
+them, go in prose below the table. Two apply everywhere:
 
 - **Depth is measured even when uncapped.** `Stack depth cap: none` stops the
   note, not the count. The risk at depth is two stories editing one file with

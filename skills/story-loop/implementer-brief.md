@@ -1,8 +1,7 @@
 # Implementer Brief
 
 The fixed artifact handed to each implementer subagent. Fill the slots, including
-`TEAM` and `PHASE` when the adapter declares teams, send it, and send nothing else. Composing this from memory every iteration is how the
-parent branch goes missing.
+`TEAM` and `PHASE` when the adapter declares teams, send it, and send nothing else.
 
 Dispatch to the adapter's `Implementer agent` (default `story-implementer`) when the
 host has it installed: its definition carries the invariants (authorization,
@@ -33,7 +32,7 @@ BRANCH FROM THE PARENT, NOT FROM WHAT IS CHECKED OUT, and only inside your own
 isolated worktree, never the shared checkout:
   git fetch <REMOTE>
   git switch -c <branch> <REMOTE>/<PARENT>
-If your branch already exists on <REMOTE>, switch to it and continue it instead.
+If your branch already exists locally or on <REMOTE>, switch to it and continue it.
 
 <PHASE wording, verbatim: see Phase wording below>
 
@@ -75,8 +74,10 @@ reads and commands into one call, read slices rather than whole files, find code
 with grep before opening it, and do not re-read a file you just edited.
 
 YOU ARE AUTHORIZED TO: create your branch, commit, push that branch, open the
-pull request, move the story file between state folders on your branch, and make
-the closeout commit when the orchestrator sends it.
+pull request, move the story file between state folders on your branch, dispatch
+the adapter's Narrowed e2e once on your branch when E2E in PR CI: no and the adapter
+names one (never in phase 1), and make the closeout commit when
+the orchestrator sends it.
 YOU MAY merge <PARENT> into your own branch to freshen it. Never rebase.
 YOU ARE NOT AUTHORIZED TO: merge into any branch but your own, force push, rebase,
 reset, amend, tag, delete branches, push to <PARENT> or to main/master/develop, change git config, bypass

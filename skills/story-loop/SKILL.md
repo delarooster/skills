@@ -17,7 +17,7 @@ further. Both narrowings are stated here so no agent has to guess which rule win
 
 | Rule | Narrowed to |
 |---|---|
-| The host's git lockdown: every git write needs an explicit user command | Invoking `/story-loop` **is** that command, scoped to the grant below and to queued stories only. It covers a merge only when the adapter's `Merge policy` is `clean-verdict`, a human having set that field |
+| The host's git lockdown: every git write needs an explicit user command | Invoking `/story-loop` **is** that command, scoped to the grant below: queued stories, a missing adapter and the session handoff. It covers a merge only when the adapter's `Merge policy` is `clean-verdict`, a human having set that field |
 | A judge's verdict is not authorization to act on its findings | Bounded remediation is authorized **below the adapter's escalation threshold only**: blocking findings, plus the SHOULD FIX findings of a MERGE AFTER FIXES only when the adapter sets `Remediate should-fix: on`, at most 2 rounds, fresh verifier context every round. At or above the threshold the loop stops and a human decides |
 
 Outside them both rules apply unchanged, and neither transfers to another command,
@@ -25,12 +25,13 @@ repository, or session. If unsure whether an action is inside a narrowing, it is
 
 ## Authorization
 
-**Invoking `/story-loop` authorizes, for queued stories only:** branch creation,
+**Invoking `/story-loop` authorizes, for queued stories, a missing adapter and the session handoff only:** branch creation,
 commits, pushes to those branches, pull request creation against the declared
 base, story file moves between state folders on the story branch, native stack
 linking of those pull requests (`gh stack link`, [native-stacks.md](native-stacks.md)),
-writing a missing adapter on its own branch with a tasks-only pull request for it
-(with `Forge: none`, push that branch and stop for the operator), dispatching the
+writing a missing adapter on its own branch with a tasks-only pull request (with
+`Forge: none`, push that branch and stop for the operator), the
+[handoff write](orchestrator.md#session-state), dispatching the
 adapter's `Narrowed e2e` workflow or pipeline (`gh workflow run`, `az pipelines run`)
 on the story branch only, once per story as [implementer-brief.md](implementer-brief.md)
 directs, and the
@@ -50,8 +51,7 @@ its own story branch to freshen it, never rebase, and merges into no other branc
 operations, branch deletion, any direct push to the base branch or to
 `main`/`master`/`develop`, git config changes, hook bypass, or edits to `tasks/`
 in the main checkout. The rule covers tracked edits: the log and a verifier's
-verdict file written into the checkout are untracked local state. It includes the adapter and a handoff file: each is written on a
-branch and lands through a tasks-only pull request. A subagent that believes it needs one of these must return
+verdict file written into the checkout are untracked local state. The tracked-edit rule includes the adapter and the handoff file, written as granted above. A subagent that believes it needs one of these must return
 `blocked` with the reason instead.
 
 ## The orchestrator reads nothing
@@ -150,14 +150,13 @@ deployed skill directory differs per host, so resolve it rather than assume it.
 With teams, a team with nothing eligible idles; it does not stop the loop. The other
 stops halt new dispatch in every team and let in-flight work finish its phase.
 
-Every stop writes the session state to the repo first
-([orchestrator.md](orchestrator.md#state-lives-in-the-repo)), then a final log row naming
+Every stop first writes the [session state](orchestrator.md#session-state)
+(any named handoff in the repo, log and list at adapter paths), then a final log row naming
 which condition fired. If a story
 completed in the same iteration, that is two rows: the story's, then the stop.
 
-A stop that needs the operator tells them with an operator brief per item: id,
-title, one line on what it is, links to the pull request and the story file where it
-lives now, and the ask. Format: [orchestrator.md](orchestrator.md#operator-brief).
+A stop that needs the operator tells them with an
+[operator brief](orchestrator.md#operator-brief) per item.
 
 Open defects not yet fixed: [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 
@@ -167,7 +166,7 @@ Open defects not yet fixed: [KNOWN-ISSUES.md](KNOWN-ISSUES.md).
 - [ ] Parent computed by the orchestrator, never by the implementer
 - [ ] Returned `BASE` checked against the supplied parent
 - [ ] Exactly one log row appended, including for blocked and escalated stories
-- [ ] Before a stop or context clear: log, review list and any handoff file written in the repo, not memory
+- [ ] Before a stop or context clear: log and review list at their adapter paths, any named handoff file in the repo; never memory
 - [ ] BLOCKING route taken from the escalation score alone, never from the summary
 - [ ] Evidence holds stopped outside score routing; `CONCERN` surfaced verbatim
 - [ ] MERGE AFTER FIXES and sign-offs stopped, or listed when a `Review list` exists
