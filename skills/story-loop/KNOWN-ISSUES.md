@@ -9,7 +9,6 @@ Open review findings. One line each; the location is where the fix lands.
 - **Re-verify after merging the base.** When an implementer merges its moved parent or the base into a verified branch, nothing requires a fresh verdict on the new head. `teams.md:15`, `verify.md#merge`
 - **Worktree removal on Codex and OpenCode.** The runners make the orchestrator remove worktrees, which is not in the permitted writes. `runner-codex.md:75`, `runner-opencode.md:41`
 - **Unsatisfiable-dependency rows count toward the blocked stop.** Two `blocked :: dependency unsatisfiable` rows in a row stop the loop, although nothing was dispatched. `SKILL.md#stop-conditions`, `orchestrator.md#nothing-eligible-is-not-nothing-left`
-- **README omits anchor-selftest.** The public skills repo's README lists `selftest.sh` but not `anchor-selftest.sh`. `README.md:66` (public skills repo)
 - **anchor-check's default root.** It defaults to `tasks/stories` while the adapter probes `stories/` first. `scripts/anchor-check.sh:16`, `adapter.md:12`
 - **`Remediate should-fix: on` wording drift.** The `on` row says a leftover MERGE AFTER FIXES stops as `off` does, without the review-list exception stated just below it. `verify.md#escalation`
 - **Teams stop list.** The loop-wide stops omit `judge unavailable` and operator sign-offs, which the main stop list has. `teams.md:19`, `SKILL.md#stop-conditions`
