@@ -15,6 +15,28 @@ Tests verify behavior through public interfaces, not implementation details. Cod
 
 See [tests.md](tests.md) for examples and [mocking.md](mocking.md) for mocking guidelines.
 
+## What must be tested: the risk chart
+
+Line coverage is not the goal and never a gate. Tests earn their place by catching real pain. Before a change, ask: **"What is the worst possible bug I could introduce?"** Score it on two axes and multiply:
+
+| Impact \ Invisibility | 1 | 2 | 3 |
+|---|---|---|---|
+| **3** | 3 | **6** | **9** |
+| **2** | 2 | **4** | **6** |
+| **1** | 1 | 2 | 3 |
+
+**Impact** (rows):
+1. Moderate impact.
+2. Significant but correctable impact.
+3. Irreparable harm to reputation or integrity, or unrecoverable loss of cash.
+
+**Invisibility** (columns):
+1. Very unlikely to be missed during the normal dev-test cycle.
+2. Discoverable in a diligent manual testing pass.
+3. Likely to be missed: subtle or complex behavior.
+
+**A score of 4 or more (impact 2 or 3 and invisibility 2 or 3) must have a test that fails when that bug is introduced.** Below 4, a test is optional: write one only when it is cheap and real. State the worst bug and its score in the PR or the slice, and name the test that covers it. A test that only raises a coverage number, or that could not fail on the named bug, does not count.
+
 ## Seams: where tests go
 
 A **seam** is the public boundary you test at: the interface where you observe behavior without reaching inside. Tests live at seams, never against internals.
