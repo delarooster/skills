@@ -25,10 +25,32 @@ ok()  { PASS=$((PASS+1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL+1)); printf '  FAIL %s\n' "$1"; }
 chk() { if [ "$2" = "$3" ]; then ok "$1"; else FAIL=$((FAIL+1)); printf '  FAIL %s\n     expected: %s\n     actual:   %s\n' "$1" "$2" "$3"; fi; }
 
-REPO="$WORK/repo"; Q="$REPO/stories"; BASE="develop"
+REPO="$WORK/repo"; Q="$REPO/stories"
 G() { git -C "$REPO" "$@"; }
 
-mkdir -p "$REPO"
+mkdir -p "$REPO/tasks"
+AD="$REPO/tasks/story-loop.md"
+cat > "$AD" <<'EOF'
+# story-loop adapter
+
+| Field | Value |
+|---|---|
+| Queue root | stories |
+| Base branch | develop |
+| Stack mode | linear |
+| Forge | none |
+| CI system | none |
+| Merge policy | never |
+| Stack policy | none |
+| Scratch root | scratch |
+EOF
+
+echo "== the adapter drives the run =="
+"$LS" adapter-check "$AD" >/dev/null && ok "forge-none adapter validates" || bad "forge-none adapter validates"
+BASE=$("$LS" adapter "$AD" 'Base branch')
+MODE=$("$LS" adapter "$AD" 'Stack mode')
+Q="$REPO/$("$LS" adapter "$AD" 'Queue root')"
+chk "base branch comes from the adapter" "develop" "$BASE"
 G init -q
 G config user.email "story-loop@localhost"
 G config user.name  "story-loop selftest"
@@ -39,7 +61,7 @@ G branch -M "$BASE"
 
 mkdir -p "$Q/2_ready"
 n=1
-for id in Y.01 Y.02 Y.03; do
+for id in YY.01 YY.02 YY.03; do
   cat > "$Q/2_ready/Y-0$n-story.md" <<EOF
 # $id: Scratch story $id
 
@@ -69,10 +91,12 @@ while :; do
 
   # This is the whole fix: the parent is computed here, by the orchestrator,
   # and handed to the worker. The worker never chooses it.
-  parent=$("$LS" parent "$LOG" "$BASE" linear "$deps")
+  parent=$("$LS" parent "$LOG" "$BASE" "$MODE" "$deps")
   branch="feat/$(printf '%s' "$id" | tr '.[:upper:]' '-[:lower:]')"
 
   G switch -q -c "$branch" "$parent"
+  scratch="$WORK/$("$LS" adapter "$AD" 'Scratch root')/$id"
+  mkdir -p "$scratch" && echo "body for $id" > "$scratch/body.md"
   echo "work for $id" > "$REPO/file-$i.txt"
   G add -A && G commit -qm "$id: add file-$i"
 
@@ -88,41 +112,125 @@ while :; do
 done
 
 chk "three stories landed" "3" "$(grep -c '| landed |' "$LOG")"
-chk "chain head is the last branch" "feat/y-03" "$("$LS" head "$LOG" "$BASE")"
+chk "chain head is the last branch" "feat/yy-03" "$("$LS" head "$LOG" "$BASE")"
 chk "chain depth is 3" "3" "$("$LS" depth "$LOG" "$BASE")"
 
 echo "== git agrees it is a real stack =="
-G merge-base --is-ancestor feat/y-01 feat/y-02 \
-  && ok "y-02 contains y-01" || bad "y-02 contains y-01"
-G merge-base --is-ancestor feat/y-02 feat/y-03 \
-  && ok "y-03 contains y-02" || bad "y-03 contains y-02"
+G merge-base --is-ancestor feat/yy-01 feat/yy-02 \
+  && ok "yy-02 contains yy-01" || bad "yy-02 contains yy-01"
+G merge-base --is-ancestor feat/yy-02 feat/yy-03 \
+  && ok "yy-03 contains yy-02" || bad "yy-03 contains yy-02"
 chk "the tip carries all three files" "3" \
-  "$(G ls-tree --name-only feat/y-03 | grep -c '^file-')"
+  "$(G ls-tree --name-only feat/yy-03 | grep -c '^file-')"
 chk "the tip is 3 commits ahead of base" "3" \
-  "$(G rev-list --count "$BASE"..feat/y-03)"
+  "$(G rev-list --count "$BASE"..feat/yy-03)"
 
 # ------------------------------------------------------------- the broken run
 echo "== control: what happens with no parent handed in =="
-for id in X.01 X.02 X.03; do
+for id in XX.01 XX.02 XX.03; do
   b="broken/$(printf '%s' "$id" | tr '.[:upper:]' '-[:lower:]')"
   G switch -q -c "$b" "$BASE"          # the default an unbriefed worker picks
   echo "work for $id" > "$REPO/broken-$id.txt"
   G add -A && G commit -qm "$id"
 done
-if G merge-base --is-ancestor broken/x-01 broken/x-02 2>/dev/null; then
+if G merge-base --is-ancestor broken/xx-01 broken/xx-02 2>/dev/null; then
   bad "unstacked branches should NOT contain each other"
 else
   ok "unstacked branches do not contain each other (the bug, reproduced)"
 fi
 chk "an unstacked tip carries only its own file" "1" \
-  "$(G ls-tree --name-only broken/x-03 | grep -c '^broken-')"
+  "$(G ls-tree --name-only broken/xx-03 | grep -c '^broken-')"
+
+echo "== scratch is per story, never shared =="
+chk "each story wrote its own scratch dir" "3" "$(find "$WORK/scratch" -mindepth 1 -maxdepth 1 -type d | grep -c .)"
+
+echo "== merge policy under forge none =="
+v=$("$LS" merge-gate "$("$LS" adapter "$AD" 'Merge policy')" MERGE 0 0 green 1/1 no none \
+   "$("$LS" adapter "$AD" 'Human-only categories')")
+chk "policy never holds even a clean verdict" "hold :: merge policy never" "$v"
+sed 's/| Merge policy | never |/| Merge policy | clean-verdict |/' "$AD" > "$WORK/cv.md"
+if "$LS" adapter-check "$WORK/cv.md" >/dev/null 2>&1; then
+  bad "clean-verdict with no forge must be rejected"
+else
+  ok "clean-verdict with no forge is rejected"
+fi
 
 echo "== and the orchestrator catches it before it is logged =="
-if "$LS" check-base feat/y-03 "$BASE" 2>/dev/null; then
+if "$LS" check-base feat/yy-03 "$BASE" 2>/dev/null; then
   bad "check-base should reject a base that is not the supplied parent"
 else
   ok "check-base rejects the unstacked return"
 fi
+
+# ------------------------------------------------------- two-repo workspace
+echo "== workspace queue shared by two repos, run from an unrelated cwd =="
+WS="$WORK/ws"
+mkdir -p "$WS/workspace/tasks/stories/2_ready" "$WS/workspace/tasks/stories/6_completed" "$WORK/elsewhere"
+for r in api web; do
+  R="$WS/$r"; mkdir -p "$R/tasks"
+  git -C "$R" init -q
+  git -C "$R" config user.email "story-loop@localhost"; git -C "$R" config user.name "story-loop e2e"
+  git -C "$R" config commit.gpgsign false
+  echo "$r" > "$R/README.md"; git -C "$R" add -A; git -C "$R" commit -qm root; git -C "$R" branch -M main
+  cat > "$R/tasks/story-loop.md" <<'EOF'
+| Field | Value |
+|---|---|
+| Queue root | ../workspace/tasks/stories |
+| Log path | ../workspace/tasks/loop-log.md |
+| Base branch | main |
+| Forge | none |
+EOF
+done
+wstory() { # wstory <file> <id> <repo> <deps>
+  printf '# %s: Workspace story\n\n**Repo:** %s\n**Dependencies:** %s\n**Effort:** 1\n' "$2" "$3" "$4" \
+    > "$WS/workspace/tasks/stories/$1"
+}
+wstory 2_ready/V-01.md VV.01 api None
+wstory 2_ready/V-02.md VV.02 web VV.01
+wstory 2_ready/V-03.md VV.03 api VV.02
+wstory 2_ready/V-04.md VV.04 web VV.00
+wstory 6_completed/V-00.md VV.00 web None
+
+cd "$WORK/elsewhere" || exit 1
+AAD="$WS/api/tasks/story-loop.md"
+WQ=$("$LS" adapter-path "$AAD" 'Queue root')
+WL=$("$LS" adapter-path "$AAD" 'Log path')
+chk "queue root resolves against the adapter's repo, not the cwd" \
+  "$(cd "$WS/workspace/tasks/stories" && pwd -P)" "$(cd "$WQ" && pwd -P)"
+chk "both member adapters name the same queue" \
+  "$(cd "$WQ" && pwd -P)" "$(cd "$("$LS" adapter-path "$WS/web/tasks/story-loop.md" 'Queue root')" && pwd -P)"
+chk "an absolute field is left alone" "/abs/x" \
+  "$(printf '| Log path | /abs/x |\n' > "$WORK/abs.md"; "$LS" adapter-path "$WORK/abs.md" 'Log path')"
+"$LS" init-log "$WL"
+chk "index reads the workspace queue" "4" "$("$LS" index "$WQ" | grep -c .)"
+chk "completed reads the workspace ledger" "VV.00" "$("$LS" completed "$WQ")"
+chk "nothing is stalled" "" "$("$LS" stalled "$WQ" "$WL")"
+
+order=""
+while :; do
+  line=$("$LS" eligible "$WQ" "$WL"); [ -n "$line" ] || break
+  id=$(printf '%s' "$line" | cut -f1); deps=$(printf '%s' "$line" | cut -f2)
+  repo=$("$LS" repo "$(printf '%s' "$line" | cut -f4)")
+  RAD="$WS/$repo/tasks/story-loop.md"
+  base=$("$LS" adapter "$RAD" 'Base branch')
+  parent=$("$LS" parent "$WL" "$base" linear "$deps" "$repo")
+  branch="feat/$(printf '%s' "$id" | tr '.[:upper:]' '-[:lower:]')"
+  git -C "$WS/$repo" switch -q -c "$branch" "$parent"
+  echo "$id" > "$WS/$repo/$id.txt"; git -C "$WS/$repo" add -A; git -C "$WS/$repo" commit -qm "$id"
+  "$LS" append "$WL" "$id" landed - "$repo:$branch" "$parent" 1/1 absent - -
+  order="$order $id"
+done
+cd "$HERE" || exit 1
+
+chk "every story ran, dependency order kept" " VV.01 VV.02 VV.03 VV.04" "$order"
+chk "VV.03 stacks on its own repo's head, not the web branch" "feat/vv-01" \
+  "$(awk -F'|' '$2 ~ /VV.03/ {gsub(/ /,"",$6); print $6}' "$WL")"
+chk "VV.02's api dependency is not a git parent in web" "main" \
+  "$(awk -F'|' '$2 ~ /VV.02/ {gsub(/ /,"",$6); print $6}' "$WL")"
+git -C "$WS/api" merge-base --is-ancestor feat/vv-01 feat/vv-03 \
+  && ok "api: vv-03 contains vv-01" || bad "api: vv-03 contains vv-01"
+chk "api head read from the shared log" "feat/vv-03" "$("$LS" head "$WL" main api)"
+chk "web depth counts only web" "2" "$("$LS" depth "$WL" main web)"
 
 echo
 printf 'repo was %s (removed on exit)\n' "$REPO"

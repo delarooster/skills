@@ -1,19 +1,31 @@
 # Runner: OpenCode
 
-Verified against opencode 1.18.29. Flags below were confirmed with
+Verified against opencode 1.18.33. Flags below were confirmed with
 `opencode run --help` and `opencode agent --help`; the multi-agent loop itself has
 not been run end to end on this host.
 
+## Agents
+
+Some skills repos' `setup.sh` renders their agents into
+`~/.config/opencode/agents/<name>.md` with `mode: subagent`, the tool list, and a
+`model:` only when the tier maps to one; others deploy skills and rules only.
+`opencode agent list` shows what is installed. Where setup renders them, do not
+create them by hand with `opencode agent create`; the next setup run is the source
+of truth. With no implementer agent installed, dispatch the host's general-purpose
+subagent with the full brief.
+
 ## Spawn
 
-Two paths. In-session, the `task` tool dispatches a subagent. Out of session:
+Two paths. In-session, the `task` tool dispatches a subagent by name: the
+adapter's `Implementer agent` (default `story-implementer`) or its `Verifier`. Out of
+session:
 
 ```bash
-opencode run --agent <agent-name> --dir "$WORKTREE" "$BRIEF"
+opencode run --agent "$IMPLEMENTER_AGENT" --dir "$WORKTREE" "$BRIEF"
 ```
 
-`opencode agent list` shows what is available; `opencode agent create` adds one.
-A repo that declares a verifier agent registers it here.
+`-m provider/model` overrides the model when the adapter's `Model tiers` names one
+the rendered agent does not.
 
 ## Isolate
 
@@ -22,7 +34,7 @@ Manual, same as Codex. Create the worktree from the computed parent and pass
 
 ```bash
 git worktree add -b "$BRANCH" "$WORKTREE" "$REMOTE/$PARENT"
-opencode run --dir "$WORKTREE" "$BRIEF"
+opencode run --agent "$IMPLEMENTER_AGENT" --dir "$WORKTREE" "$BRIEF"
 ```
 
 Keep the worktree through verification, remediation, and the final story-state

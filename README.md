@@ -65,6 +65,7 @@ The orchestrator never reads source, diffs, or logs, so its context stays flat a
 ```bash
 bash skills/story-loop/scripts/selftest.sh    # state machine
 bash skills/story-loop/scripts/e2e-chain.sh   # end-to-end chain in a throwaway repo
+bash skills/story-loop/scripts/anchor-selftest.sh  # anchor checker
 ```
 
 ## Evals
